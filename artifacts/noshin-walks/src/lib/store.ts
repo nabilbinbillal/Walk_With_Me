@@ -113,6 +113,25 @@ export function isNoshinHere(graceMs = 8000): boolean {
   return Date.now() - p.noshinLastSeen < graceMs;
 }
 
+export function nabilLastSeenAgo(): number {
+  const p = readPresence();
+  if (!p.nabilLastSeen) return Infinity;
+  return Date.now() - p.nabilLastSeen;
+}
+
+export function nabilStatusText(): string {
+  const ago = nabilLastSeenAgo();
+  if (ago < 8000) return "yes he's here ♡";
+  if (ago < 60_000) return "here a moment ago";
+  if (ago === Infinity) return "will come, soon ♡";
+  const mins = Math.floor(ago / 60_000);
+  if (mins < 60) return `seen ${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `seen ${hours} hr ago`;
+  const days = Math.floor(hours / 24);
+  return `seen ${days} day${days === 1 ? "" : "s"} ago`;
+}
+
 export function readFootsteps(): number {
   if (typeof window === "undefined") return 0;
   const v = localStorage.getItem(FOOTSTEPS_KEY);

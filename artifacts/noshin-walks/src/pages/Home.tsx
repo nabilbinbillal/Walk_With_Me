@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import {
   isNabilHere,
+  nabilStatusText,
   pingPresence,
   readMessages,
   readProposals,
@@ -258,28 +259,6 @@ export function Home({ mode }: Props) {
           </Link>
         </section>
 
-        {/* Other route hint */}
-        <section
-          className="pixel-border"
-          style={{
-            padding: 12,
-            marginBottom: 18,
-            background: "#fff8f3",
-          }}
-        >
-          <div className="font-mono-retro" style={{ fontSize: 18 }}>
-            {mode === "noshin" ? (
-              <>
-                ↻ tell Nabil to open <span className="font-pixel" style={{ fontSize: 10 }}>/NABIL</span> on his phone — your worlds will share footsteps and messages.
-              </>
-            ) : (
-              <>
-                ↻ Noshin can open the <span className="font-pixel" style={{ fontSize: 10 }}>/</span> page on her side. Same world, same little path.
-              </>
-            )}
-          </div>
-        </section>
-
         {/* Proposals */}
         <section style={{ marginBottom: 18 }}>
           <div className="font-pixel" style={{ fontSize: 12, marginBottom: 10 }}>
@@ -339,10 +318,18 @@ export function Home({ mode }: Props) {
             <div className="font-pixel" style={{ fontSize: 9, opacity: 0.6 }}>YOU ARE</div>
             <div className="font-pixel" style={{ fontSize: 14 }}>{meName.toUpperCase()}</div>
           </div>
-          <div>
+          <div style={{ textAlign: "right" }}>
             <div className="font-pixel" style={{ fontSize: 9, opacity: 0.6 }}>{otherName.toUpperCase()}</div>
-            <div className="font-pixel" style={{ fontSize: 14, color: nabilHere || mode === "nabil" ? "#d94e7c" : "#999" }}>
-              {mode === "noshin" ? (nabilHere ? "ONLINE" : "AWAY") : "—"}
+            <div
+              className="font-mono-retro"
+              style={{
+                fontSize: 18,
+                color: nabilHere || mode === "nabil" ? "#d94e7c" : "#1a1a1a",
+                lineHeight: 1.1,
+                marginTop: 2,
+              }}
+            >
+              {mode === "noshin" ? nabilStatusText() : "walking somewhere"}
             </div>
           </div>
         </section>
