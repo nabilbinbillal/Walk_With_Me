@@ -176,6 +176,7 @@ export type WalkPos = {
   worldX: number;
   facing: -1 | 1;
   walking: boolean;
+  jumpY?: number;
   ts: number;
 };
 
@@ -184,9 +185,10 @@ export function pingWalkPos(
   worldX: number,
   facing: -1 | 1,
   walking: boolean,
+  jumpY = 0,
 ) {
   const key = who === "noshin" ? WALKPOS_NOSHIN_KEY : WALKPOS_NABIL_KEY;
-  const data: WalkPos = { worldX, facing, walking, ts: Date.now() };
+  const data: WalkPos = { worldX, facing, walking, jumpY, ts: Date.now() };
   localStorage.setItem(key, JSON.stringify(data));
   window.dispatchEvent(new Event("noshin-store-change"));
 }

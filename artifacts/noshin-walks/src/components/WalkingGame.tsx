@@ -555,6 +555,8 @@ type Character = {
   facing: 1 | -1;
   walkFrame: number;
   walking: boolean;
+  jumpY: number;
+  jumpVy: number;
 };
 
 function drawNoshin(
@@ -722,6 +724,7 @@ function drawNabil(
 export function WalkingGame({ mode, onExit }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [keysOpen, setKeysOpen] = useState(false);
   const [chatText, setChatText] = useState("");
   const [proposalOpen, setProposalOpen] = useState(false);
   const [proposalTime, setProposalTime] = useState("");
@@ -743,6 +746,8 @@ export function WalkingGame({ mode, onExit }: Props) {
     facing: 1,
     walkFrame: 0,
     walking: false,
+    jumpY: 0,
+    jumpVy: 0,
   });
   const otherCharRef = useRef<Character>({
     x: 0,
@@ -750,6 +755,8 @@ export function WalkingGame({ mode, onExit }: Props) {
     facing: -1,
     walkFrame: 0,
     walking: false,
+    jumpY: 0,
+    jumpVy: 0,
   });
   const messagesRef = useRef(readMessages());
   const lastMsgIdRef = useRef<string | null>(
@@ -822,16 +829,23 @@ export function WalkingGame({ mode, onExit }: Props) {
         keyDirRef.current = down ? "right" : keyDirRef.current === "right" ? null : keyDirRef.current;
         if (!down && keyDirRef.current === "right") keyDirRef.current = null;
       }
-      if (down && k === " " && (e.shiftKey || keyDirRef.current === "right")) {
-        // D + Space toggles locked walk
-        if (keyDirRef.current === "right") {
-          e.preventDefault();
+      if (down && k === " ") {
+        // Don't steal Space from inputs / textareas
+        const tag = (e.target as HTMLElement | null)?.tagName ?? "";
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        e.preventDefault();
+        if (e.shiftKey) {
           setLockedWalk((v) => !v);
+        } else {
+          // Jump only when on the ground (jumpY === 0)
+          const c = myCharRef.current;
+          if (c.jumpY === 0) c.jumpVy = -0.42;
         }
       }
       if (down && k === "escape") {
         setChatOpen(false);
         setProposalOpen(false);
+        setKeysOpen(false);
       }
     };
     const dn = (e: KeyboardEvent) => onKey(e, true);
@@ -881,7 +895,14 @@ export function WalkingGame({ mode, onExit }: Props) {
       const speed = 0.16; // px/ms
       const me = myCharRef.current;
       const groundY = h * GROUND_Y_RATIO;
-      me.y = groundY - SPRITE_H;
+
+      // Jump physics: jumpY > 0 means above ground (subtract from y).
+      // Gravity pulls jumpVy positive; landing clamps at 0.
+      me.jumpVy += 0.0014 * dt;
+      me.jumpY = Math.max(0, me.jumpY - me.jumpVy * dt);
+      if (me.jumpY === 0 && me.jumpVy > 0) me.jumpVy = 0;
+
+      me.y = groundY - SPRITE_H - me.jumpY;
 
       if (inputDir === "right") {
         scrollXRef.current += speed * dt;
@@ -906,14 +927,16 @@ export function WalkingGame({ mode, onExit }: Props) {
       me.x = Math.floor(w * 0.4);
 
       // Broadcast my world position so the other side can see me move.
-      // Throttled to every ~120ms.
-      if (t - lastPingT > 120) {
+      // Throttled to every ~120ms (but fire immediately while jumping).
+      const pingNow = t - lastPingT > 120 || me.jumpY > 0;
+      if (pingNow) {
         lastPingT = t;
         pingWalkPos(
           mode,
           scrollXRef.current,
           (me.facing as -1 | 1),
           me.walking,
+          me.jumpY,
         );
       }
 
@@ -938,7 +961,8 @@ export function WalkingGame({ mode, onExit }: Props) {
         other.x = other.x === 0
           ? drawX
           : other.x + (drawX - other.x) * Math.min(1, dt * 0.02);
-        other.y = groundY - SPRITE_H;
+        other.jumpY = otherPos.jumpY ?? 0;
+        other.y = groundY - SPRITE_H - other.jumpY;
         other.facing = otherPos.facing;
         other.walking = otherPos.walking;
         if (otherPos.walking) other.walkFrame += dt * 0.04;
@@ -990,53 +1014,58 @@ export function WalkingGame({ mode, onExit }: Props) {
         if (otherIsPresent) drawNoshin(ctx, other);
       }
 
-      // Sky ghost: when Noshin walks alone (Nabil not here), show his ghost
-      // floating in the sky with rotating messages he left from /nabil.
+      // When Noshin walks alone (Nabil not here), Nabil's voice calls out
+      // from off-screen on the LEFT — "noshin wait for me i am coming gurl".
+      // A tiny Nabil head peeks in from the left edge with a speech bubble.
       if (mode === "noshin" && !otherIsPresent) {
-        const ghosts = ghostMsgsRef.current;
-        if (t > ghostNextSwapRef.current && ghosts.length > 0) {
-          ghostIdxRef.current = Math.floor(Math.random() * ghosts.length);
-          ghostNextSwapRef.current = t + 6500 + Math.random() * 2500;
+        ghostFloatPhaseRef.current += dt * 0.003;
+        const peekBob = Math.sin(ghostFloatPhaseRef.current) * 2;
+        const peekX = 4;
+        const peekY = groundY - SPRITE_H + peekBob;
+        // Tiny Nabil head poking in from off-screen (only right half visible)
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, peekY - 4, SPRITE_W * 0.55, SPRITE_H + 12);
+        ctx.clip();
+        drawNabil(ctx, {
+          x: peekX - SPRITE_W * 0.45,
+          y: peekY,
+          facing: 1,
+          walkFrame: 0,
+          walking: false,
+          jumpY: 0,
+          jumpVy: 0,
+        });
+        ctx.restore();
+        const text = "noshin wait for me i am coming gurl ♡";
+        ctx.font = "18px VT323, monospace";
+        const padX = 10;
+        const tw = Math.min(ctx.measureText(text).width, w * 0.55);
+        const bw = tw + padX * 2;
+        const bh = 28;
+        // anchor bubble UP-AND-RIGHT of the peeking head
+        const bx = peekX + SPRITE_W * 0.55 + 12;
+        const by = peekY - bh - 4;
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = "#1a1a1a";
+        ctx.lineWidth = 3;
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.strokeRect(bx, by, bw, bh);
+        // tail pointing back-left toward head
+        ctx.beginPath();
+        ctx.moveTo(bx, by + 8);
+        ctx.lineTo(bx - 10, by + 16);
+        ctx.lineTo(bx, by + 20);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#1a1a1a";
+        let display = text;
+        while (ctx.measureText(display).width > tw && display.length > 4) {
+          display = display.slice(0, -2);
         }
-        ghostFloatPhaseRef.current += dt * 0.002;
-        const gx = w * 0.7;
-        const gy = h * 0.22 + Math.sin(ghostFloatPhaseRef.current) * 8;
-        drawSkyGhost(ctx, gx, gy);
-        const text = ghosts[ghostIdxRef.current] ?? "";
-        if (text) {
-          ctx.font = "18px VT323, monospace";
-          const padX = 10;
-          const tw = Math.min(ctx.measureText(text).width, w * 0.55);
-          // tail
-          ctx.fillStyle = "#ffffff";
-          ctx.strokeStyle = "#1a1a1a";
-          ctx.lineWidth = 3;
-          const bw = tw + padX * 2;
-          const bh = 28;
-          const bx = Math.max(8, gx - bw - 16);
-          const by = gy - 8;
-          ctx.fillRect(bx, by, bw, bh);
-          ctx.strokeRect(bx, by, bw, bh);
-          // little tail triangle
-          ctx.beginPath();
-          ctx.moveTo(bx + bw, by + 8);
-          ctx.lineTo(bx + bw + 10, by + 12);
-          ctx.lineTo(bx + bw, by + 18);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = "#1a1a1a";
-          // clip text
-          let display = text;
-          while (
-            ctx.measureText(display).width > tw &&
-            display.length > 4
-          ) {
-            display = display.slice(0, -2);
-          }
-          if (display !== text) display = display.slice(0, -1) + "…";
-          ctx.fillText(display, bx + padX, by + 19);
-        }
+        if (display !== text) display = display.slice(0, -1) + "…";
+        ctx.fillText(display, bx + padX, by + 19);
       }
 
       // HUD bubble
@@ -1200,6 +1229,14 @@ export function WalkingGame({ mode, onExit }: Props) {
           >
             PLAN
           </button>
+          <button
+            className="pixel-btn"
+            onClick={() => setKeysOpen(true)}
+            style={{ fontSize: 9, padding: "8px 10px", boxShadow: "2px 2px 0 0 #1a1a1a" }}
+            title="Show keyboard controls"
+          >
+            KEYS
+          </button>
         </div>
 
         {/* Nabil's contextual quick-send chips — only on Nabil's walk page */}
@@ -1223,12 +1260,38 @@ export function WalkingGame({ mode, onExit }: Props) {
           background: "#fff",
         }}
       >
-        <Joystick
-          onChange={(d) => {
-            dirRef.current = d;
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 16,
           }}
-          onAction={() => setChatOpen(true)}
-        />
+        >
+          <Joystick
+            onChange={(d) => {
+              dirRef.current = d;
+            }}
+            onAction={() => setChatOpen(true)}
+          />
+          <button
+            className="pixel-btn"
+            onClick={() => {
+              const c = myCharRef.current;
+              if (c.jumpY === 0) c.jumpVy = -0.42;
+            }}
+            style={{
+              fontSize: 11,
+              padding: "16px 14px",
+              boxShadow: "3px 3px 0 0 #1a1a1a",
+              background: "#ffd6e6",
+            }}
+            aria-label="Jump"
+            title="Jump (or press SPACE)"
+          >
+            ♡ JUMP
+          </button>
+        </div>
         <div
           className="font-pixel"
           style={{
@@ -1238,7 +1301,7 @@ export function WalkingGame({ mode, onExit }: Props) {
             opacity: 0.7,
           }}
         >
-          HOLD ◄ OR ► TO WALK · RELEASE TO STOP
+          HOLD ◄ OR ► TO WALK · TAP ♡ JUMP OR PRESS SPACE TO HOP
         </div>
       </div>
 
@@ -1346,6 +1409,83 @@ export function WalkingGame({ mode, onExit }: Props) {
           </div>
         </Modal>
       )}
+
+      {/* Keyboard guide modal */}
+      {keysOpen && (
+        <Modal onClose={() => setKeysOpen(false)} title="HOW TO PLAY">
+          <div
+            className="font-mono-retro"
+            style={{ fontSize: 18, lineHeight: 1.5 }}
+          >
+            <KeyRow keys={["←", "A"]} action="walk left" />
+            <KeyRow keys={["→", "D"]} action="walk right" />
+            <KeyRow keys={["SPACE"]} action="jump ♡" />
+            <KeyRow keys={["SHIFT", "+", "SPACE"]} action="toggle auto-walk" />
+            <KeyRow keys={["ESC"]} action="close menus" />
+            <div
+              className="font-pixel"
+              style={{ fontSize: 9, marginTop: 12, color: "#7a3a4a" }}
+            >
+              ON MOBILE: USE THE JOYSTICK BELOW. TAP THE LITTLE ♡ JUMP BUTTON
+              TO HOP.
+            </div>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              marginTop: 14,
+              justifyContent: "flex-end",
+            }}
+          >
+            <button
+              className="pixel-btn pixel-btn-primary"
+              onClick={() => setKeysOpen(false)}
+            >
+              GOT IT
+            </button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function KeyRow({ keys, action }: { keys: string[]; action: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        marginBottom: 8,
+      }}
+    >
+      {keys.map((k, i) =>
+        k === "+" ? (
+          <span key={i} className="font-mono-retro" style={{ fontSize: 18 }}>
+            +
+          </span>
+        ) : (
+          <span
+            key={i}
+            className="font-pixel"
+            style={{
+              fontSize: 9,
+              padding: "4px 8px",
+              border: "2px solid #1a1a1a",
+              background: "#fff5fb",
+              boxShadow: "2px 2px 0 0 #1a1a1a",
+              minWidth: 18,
+              textAlign: "center",
+              display: "inline-block",
+            }}
+          >
+            {k}
+          </span>
+        ),
+      )}
+      <span style={{ marginLeft: 8 }}>{action}</span>
     </div>
   );
 }
