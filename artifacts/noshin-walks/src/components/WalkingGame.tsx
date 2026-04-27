@@ -7,6 +7,7 @@ import {
   isNabilHere,
   isNoshinHere,
   pingPresence,
+  readGhostMessages,
   readMessages,
   useStoreSubscribe,
 } from "@/lib/store";
@@ -263,6 +264,51 @@ function drawNoshin(
   ctx.fillRect(x + 14, y + 28 + Math.max(0, legB), 4, 4 - Math.max(0, legB));
 }
 
+function drawSkyGhost(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+) {
+  // floaty white ghost with Nabil's blue ribbon and dark hair
+  const x = Math.floor(cx);
+  const y = Math.floor(cy);
+  // glow
+  ctx.fillStyle = "rgba(255,255,255,0.35)";
+  ctx.beginPath();
+  ctx.arc(x + 12, y + 16, 22, 0, Math.PI * 2);
+  ctx.fill();
+  // body
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(x + 4, y + 4, 20, 22);
+  ctx.fillRect(x + 2, y + 8, 24, 14);
+  // wavy bottom
+  ctx.fillRect(x + 2, y + 26, 4, 4);
+  ctx.fillRect(x + 10, y + 26, 4, 4);
+  ctx.fillRect(x + 18, y + 26, 4, 4);
+  ctx.fillRect(x + 6, y + 22, 4, 4);
+  ctx.fillRect(x + 14, y + 22, 4, 4);
+  ctx.fillRect(x + 22, y + 22, 4, 4);
+  // hair (so it's identifiable as Nabil)
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(x + 6, y + 4, 16, 6);
+  // ribbon (blue)
+  ctx.fillStyle = "#4ea3ff";
+  ctx.fillRect(x + 4, y + 0, 6, 4);
+  ctx.fillRect(x + 18, y + 0, 6, 4);
+  ctx.fillRect(x + 10, y + 2, 8, 2);
+  ctx.fillStyle = "#a8d4ff";
+  ctx.fillRect(x + 5, y + 1, 2, 2);
+  ctx.fillRect(x + 19, y + 1, 2, 2);
+  // eyes
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(x + 9, y + 14, 2, 3);
+  ctx.fillRect(x + 17, y + 14, 2, 3);
+  // shy smile
+  ctx.fillRect(x + 12, y + 19, 4, 1);
+  ctx.fillRect(x + 11, y + 18, 1, 1);
+  ctx.fillRect(x + 16, y + 18, 1, 1);
+}
+
 function drawNabil(
   ctx: CanvasRenderingContext2D,
   c: Character,
@@ -358,6 +404,10 @@ export function WalkingGame({ mode, onExit }: Props) {
   const lastMsgIdRef = useRef<string | null>(
     messagesRef.current[messagesRef.current.length - 1]?.id ?? null,
   );
+  const ghostMsgsRef = useRef<string[]>(readGhostMessages());
+  const ghostIdxRef = useRef(0);
+  const ghostNextSwapRef = useRef(performance.now() + 6000);
+  const ghostFloatPhaseRef = useRef(Math.random() * Math.PI * 2);
 
   useEffect(() => {
     lockedWalkRef.current = lockedWalk;
@@ -368,6 +418,7 @@ export function WalkingGame({ mode, onExit }: Props) {
     const off = useStoreSubscribe(() => {
       const msgs = readMessages();
       messagesRef.current = msgs;
+      ghostMsgsRef.current = readGhostMessages();
       const last = msgs[msgs.length - 1];
       if (last && last.id !== lastMsgIdRef.current) {
         lastMsgIdRef.current = last.id;
@@ -509,6 +560,55 @@ export function WalkingGame({ mode, onExit }: Props) {
       } else {
         drawNabil(ctx, me);
         if (otherIsPresent) drawNoshin(ctx, other);
+      }
+
+      // Sky ghost: when Noshin walks alone (Nabil not here), show his ghost
+      // floating in the sky with rotating messages he left from /nabil.
+      if (mode === "noshin" && !otherIsPresent) {
+        const ghosts = ghostMsgsRef.current;
+        if (t > ghostNextSwapRef.current && ghosts.length > 0) {
+          ghostIdxRef.current = Math.floor(Math.random() * ghosts.length);
+          ghostNextSwapRef.current = t + 6500 + Math.random() * 2500;
+        }
+        ghostFloatPhaseRef.current += dt * 0.002;
+        const gx = w * 0.7;
+        const gy = h * 0.22 + Math.sin(ghostFloatPhaseRef.current) * 8;
+        drawSkyGhost(ctx, gx, gy);
+        const text = ghosts[ghostIdxRef.current] ?? "";
+        if (text) {
+          ctx.font = "18px VT323, monospace";
+          const padX = 10;
+          const tw = Math.min(ctx.measureText(text).width, w * 0.55);
+          // tail
+          ctx.fillStyle = "#ffffff";
+          ctx.strokeStyle = "#1a1a1a";
+          ctx.lineWidth = 3;
+          const bw = tw + padX * 2;
+          const bh = 28;
+          const bx = Math.max(8, gx - bw - 16);
+          const by = gy - 8;
+          ctx.fillRect(bx, by, bw, bh);
+          ctx.strokeRect(bx, by, bw, bh);
+          // little tail triangle
+          ctx.beginPath();
+          ctx.moveTo(bx + bw, by + 8);
+          ctx.lineTo(bx + bw + 10, by + 12);
+          ctx.lineTo(bx + bw, by + 18);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = "#1a1a1a";
+          // clip text
+          let display = text;
+          while (
+            ctx.measureText(display).width > tw &&
+            display.length > 4
+          ) {
+            display = display.slice(0, -2);
+          }
+          if (display !== text) display = display.slice(0, -1) + "…";
+          ctx.fillText(display, bx + padX, by + 19);
+        }
       }
 
       // HUD bubble

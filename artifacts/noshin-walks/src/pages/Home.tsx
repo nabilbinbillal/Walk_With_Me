@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import {
+  addGhostMessage,
   isNabilHere,
   nabilStatusText,
   pingPresence,
+  readGhostMessages,
   readMessages,
   readProposals,
+  removeGhostMessage,
   respondProposal,
   useStoreSubscribe,
   type Proposal,
@@ -305,6 +308,8 @@ export function Home({ mode }: Props) {
           )}
         </section>
 
+        {mode === "nabil" && <GhostMessagesPanel />}
+
         {/* Stats */}
         <section
           className="pixel-border"
@@ -360,6 +365,98 @@ export function Home({ mode }: Props) {
         />
       )}
     </div>
+  );
+}
+
+function GhostMessagesPanel() {
+  const [items, setItems] = useState<string[]>(readGhostMessages());
+  const [text, setText] = useState("");
+
+  useEffect(() => {
+    const off = useStoreSubscribe(() => setItems(readGhostMessages()));
+    return off;
+  }, []);
+
+  const submit = () => {
+    const t = text.trim();
+    if (!t) return;
+    addGhostMessage(t);
+    setText("");
+  };
+
+  return (
+    <section style={{ marginBottom: 18 }}>
+      <div className="font-pixel" style={{ fontSize: 12, marginBottom: 10 }}>
+        ☁  GHOST WHISPERS FOR NOSHIN
+      </div>
+      <div className="pixel-border" style={{ padding: 14 }}>
+        <div className="font-mono-retro" style={{ fontSize: 18, opacity: 0.75, marginBottom: 10 }}>
+          when she walks alone, your ghost floats in the sky and says one of these to her ♡
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder="say something cute..."
+            className="font-mono-retro"
+            maxLength={80}
+            style={{
+              flex: 1,
+              fontSize: 18,
+              padding: "8px 10px",
+              border: "3px solid #1a1a1a",
+              background: "#fff",
+              outline: "none",
+            }}
+          />
+          <button className="pixel-btn pixel-btn-primary" onClick={submit} style={{ fontSize: 10 }}>
+            + ADD
+          </button>
+        </div>
+        {items.length === 0 ? (
+          <div className="font-mono-retro" style={{ fontSize: 16, opacity: 0.6 }}>
+            no whispers yet... add one above ♡
+          </div>
+        ) : (
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+            {items.map((m, i) => (
+              <li
+                key={i}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "6px 10px",
+                  border: "2px dashed #1a1a1a",
+                  background: "#fafafa",
+                }}
+              >
+                <span className="font-mono-retro" style={{ fontSize: 18, lineHeight: 1.2 }}>
+                  "{m}"
+                </span>
+                <button
+                  className="font-pixel"
+                  onClick={() => removeGhostMessage(i)}
+                  title="remove"
+                  style={{
+                    fontSize: 9,
+                    padding: "4px 8px",
+                    border: "2px solid #1a1a1a",
+                    background: "#fff",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                  }}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }
 

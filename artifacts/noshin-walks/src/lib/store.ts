@@ -18,6 +18,16 @@ const PROPOSAL_KEY = "noshin.proposals.v1";
 const MESSAGE_KEY = "noshin.messages.v1";
 const PRESENCE_KEY = "noshin.presence.v1";
 const FOOTSTEPS_KEY = "noshin.footsteps.v1";
+const GHOST_KEY = "noshin.ghostMessages.v1";
+
+const DEFAULT_GHOSTS = [
+  "hi noshin ♡ keep walking, you're doing great",
+  "i'm somewhere, but i'm with you",
+  "look at the sky for me, is it pink today?",
+  "drink some water, please ♡",
+  "one more step, that's my girl",
+  "miss you a tiny bit. okay, a lot.",
+];
 
 function safeParse<T>(s: string | null, fallback: T): T {
   if (!s) return fallback;
@@ -130,6 +140,33 @@ export function nabilStatusText(): string {
   if (hours < 24) return `seen ${hours} hr ago`;
   const days = Math.floor(hours / 24);
   return `seen ${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+export function readGhostMessages(): string[] {
+  if (typeof window === "undefined") return DEFAULT_GHOSTS.slice();
+  const raw = localStorage.getItem(GHOST_KEY);
+  if (!raw) return DEFAULT_GHOSTS.slice();
+  const parsed = safeParse<string[]>(raw, DEFAULT_GHOSTS.slice());
+  return parsed.length > 0 ? parsed : DEFAULT_GHOSTS.slice();
+}
+
+export function writeGhostMessages(items: string[]) {
+  localStorage.setItem(GHOST_KEY, JSON.stringify(items));
+  window.dispatchEvent(new Event("noshin-store-change"));
+}
+
+export function addGhostMessage(text: string) {
+  const t = text.trim();
+  if (!t) return;
+  const all = readGhostMessages();
+  all.unshift(t);
+  writeGhostMessages(all.slice(0, 30));
+}
+
+export function removeGhostMessage(idx: number) {
+  const all = readGhostMessages();
+  all.splice(idx, 1);
+  writeGhostMessages(all);
 }
 
 export function readFootsteps(): number {
