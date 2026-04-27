@@ -1,0 +1,11 @@
+{
+  "buildCommand": "cd artifacts/mockup-sandbox && pnpm install && pnpm run build",
+  "outputDirectory": "artifacts/mockup-sandbox/dist",
+  "installCommand": "cd artifacts/mockup-sandbox && pnpm install",
+  "framework": "vite",
+  "env": {
+    "PORT": "3000",
+    "BASE_PATH": "/",
+    "NODE_ENV": "production"
+  }
+}

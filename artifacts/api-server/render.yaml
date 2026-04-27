@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: api-server
+    runtime: node
+    plan: free
+    buildCommand: cd artifacts/api-server && pnpm install && pnpm run build
+    startCommand: cd artifacts/api-server && pnpm run start
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
