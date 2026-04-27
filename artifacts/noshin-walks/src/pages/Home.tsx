@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import {
   addGhostMessage,
+  isJoinTime,
   isNabilHere,
+  isNoshinHere,
   nabilStatusText,
+  parseProposalTime,
   pingPresence,
   readGhostMessages,
   readMessages,
@@ -123,6 +126,9 @@ export function Home({ mode }: Props) {
   const [walkAloneOpen, setWalkAloneOpen] = useState(false);
   const [proposals, setProposals] = useState<Proposal[]>(readProposals());
   const [nabilHere, setNabilHere] = useState(isNabilHere());
+  const [otherHere, setOtherHere] = useState(
+    mode === "noshin" ? isNabilHere() : isNoshinHere(),
+  );
   const [unread, setUnread] = useState(readMessages().length);
 
   useEffect(() => {
@@ -130,6 +136,7 @@ export function Home({ mode }: Props) {
     const id = window.setInterval(() => {
       pingPresence(mode);
       setNabilHere(isNabilHere());
+      setOtherHere(mode === "noshin" ? isNabilHere() : isNoshinHere());
       force((v) => v + 1);
     }, 2000);
     return () => window.clearInterval(id);
@@ -253,14 +260,44 @@ export function Home({ mode }: Props) {
           >
             ► WALK ALONE
           </button>
-          <Link
-            href={mode === "noshin" ? "/walk" : "/nabil/walk"}
-            className="pixel-btn"
-            style={{ padding: "18px 12px", fontSize: 12, textAlign: "center", textDecoration: "none", display: "block" }}
-          >
-            {`► WALK WITH ${otherName.toUpperCase()}`}
-          </Link>
+          {otherHere ? (
+            <Link
+              href={mode === "noshin" ? "/walk" : "/nabil/walk"}
+              className="pixel-btn"
+              style={{
+                padding: "18px 12px",
+                fontSize: 12,
+                textAlign: "center",
+                textDecoration: "none",
+                display: "block",
+              }}
+            >
+              {`► WALK WITH ${otherName.toUpperCase()}`}
+            </Link>
+          ) : (
+            <button
+              className="pixel-btn"
+              disabled
+              title={`${otherName} isn't online yet`}
+              style={{
+                padding: "18px 12px",
+                fontSize: 12,
+                opacity: 0.45,
+                cursor: "not-allowed",
+              }}
+            >
+              {`✗ ${otherName.toUpperCase()} NOT HERE`}
+            </button>
+          )}
         </section>
+
+        {/* Join now banner — surfaces accepted proposals when their time arrives */}
+        <JoinNowBanner
+          proposals={proposals}
+          mode={mode}
+          otherHere={otherHere}
+          otherName={otherName}
+        />
 
         {/* Proposals */}
         <section style={{ marginBottom: 18 }}>
@@ -365,6 +402,101 @@ export function Home({ mode }: Props) {
         />
       )}
     </div>
+  );
+}
+
+function JoinNowBanner({
+  proposals,
+  mode,
+  otherHere,
+  otherName,
+}: {
+  proposals: Proposal[];
+  mode: Mode;
+  otherHere: boolean;
+  otherName: string;
+}) {
+  const [, tick] = useState(0);
+  // re-evaluate every 30s so "join now" appears as time crosses
+  useEffect(() => {
+    const id = window.setInterval(() => tick((v) => v + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const due = proposals.filter(isJoinTime);
+  if (due.length === 0) return null;
+  const p = due[0];
+  const target = parseProposalTime(p.time);
+  const inFuture = target ? target.getTime() - Date.now() : 0;
+  const niceTime = target
+    ? target.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : p.time;
+
+  let headline: string;
+  if (!target) headline = "IT'S TIME ♡";
+  else if (inFuture > 60_000)
+    headline = `STARTING IN ${Math.ceil(inFuture / 60_000)} MIN ♡`;
+  else if (inFuture > 0) headline = "ALMOST TIME ♡";
+  else headline = "IT'S TIME ♡";
+
+  const walkPath = mode === "noshin" ? "/walk" : "/nabil/walk";
+
+  return (
+    <section
+      className="pixel-border join-pulse"
+      style={{
+        padding: 14,
+        marginBottom: 18,
+        background: "#fff0f5",
+        borderColor: "#d94e7c",
+      }}
+    >
+      <div
+        className="font-pixel"
+        style={{ fontSize: 12, color: "#d94e7c", marginBottom: 6 }}
+      >
+        ♡ {headline}
+      </div>
+      <div
+        className="font-mono-retro"
+        style={{ fontSize: 20, lineHeight: 1.3, marginBottom: 4 }}
+      >
+        {p.message ? `"${p.message}"` : "your walk together is ready"}
+      </div>
+      <div
+        className="font-mono-retro"
+        style={{ fontSize: 16, opacity: 0.7, marginBottom: 12 }}
+      >
+        {niceTime} · {otherHere ? `${otherName.toLowerCase()} is here ♡` : `waiting for ${otherName.toLowerCase()}...`}
+      </div>
+      {otherHere ? (
+        <Link
+          href={walkPath}
+          className="pixel-btn pixel-btn-primary"
+          style={{
+            display: "inline-block",
+            textDecoration: "none",
+            fontSize: 11,
+            padding: "12px 18px",
+          }}
+        >
+          ► JOIN NOW
+        </Link>
+      ) : (
+        <button
+          className="pixel-btn"
+          disabled
+          style={{
+            fontSize: 11,
+            padding: "12px 18px",
+            opacity: 0.5,
+            cursor: "not-allowed",
+          }}
+        >
+          WAITING FOR {otherName.toUpperCase()}...
+        </button>
+      )}
+    </section>
   );
 }
 

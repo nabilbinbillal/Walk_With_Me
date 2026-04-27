@@ -7,8 +7,10 @@ import {
   isNabilHere,
   isNoshinHere,
   pingPresence,
+  pingWalkPos,
   readGhostMessages,
   readMessages,
+  readWalkPos,
   useStoreSubscribe,
 } from "@/lib/store";
 
@@ -495,6 +497,7 @@ export function WalkingGame({ mode, onExit }: Props) {
 
     let lastT = performance.now();
     let stepAccumulator = 0;
+    let lastPingT = 0;
 
     const tick = (t: number) => {
       const dt = Math.min(64, t - lastT);
@@ -534,15 +537,43 @@ export function WalkingGame({ mode, onExit }: Props) {
 
       me.x = Math.floor(w * 0.4);
 
-      // other character: position based on whether they are present
+      // Broadcast my world position so the other side can see me move.
+      // Throttled to every ~120ms.
+      if (t - lastPingT > 120) {
+        lastPingT = t;
+        pingWalkPos(
+          mode,
+          scrollXRef.current,
+          (me.facing as -1 | 1),
+          me.walking,
+        );
+      }
+
+      // Other character: read their broadcast world position.
       const other = otherCharRef.current;
-      const otherIsPresent = mode === "noshin" ? isNabilHere() : isNoshinHere();
-      if (otherIsPresent) {
-        other.x = Math.floor(w * 0.6);
+      const otherSide: Mode = mode === "noshin" ? "nabil" : "noshin";
+      const otherPos = readWalkPos(otherSide);
+      const POS_FRESH_MS = 6000;
+      const otherIsPresent =
+        !!otherPos && Date.now() - otherPos.ts < POS_FRESH_MS;
+      if (otherIsPresent && otherPos) {
+        // Their screen X = where they'd appear in my world, given the
+        // difference between our world-X positions. Clamp to keep on-screen
+        // when they're far so they walk in from the side instead of vanishing.
+        const targetScreenX = me.x + (otherPos.worldX - scrollXRef.current);
+        const minX = -SPRITE_W;
+        const maxX = w + SPRITE_W;
+        let drawX = targetScreenX;
+        if (drawX < minX) drawX = minX;
+        if (drawX > maxX) drawX = maxX;
+        // Smooth interpolate toward target for a less jittery look.
+        other.x = other.x === 0
+          ? drawX
+          : other.x + (drawX - other.x) * Math.min(1, dt * 0.02);
         other.y = groundY - SPRITE_H;
-        other.facing = -1;
-        other.walking = me.walking;
-        other.walkFrame = me.walkFrame * 0.9;
+        other.facing = otherPos.facing;
+        other.walking = otherPos.walking;
+        if (otherPos.walking) other.walkFrame += dt * 0.04;
       }
 
       // draw

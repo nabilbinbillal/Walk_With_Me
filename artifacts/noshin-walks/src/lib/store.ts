@@ -19,6 +19,8 @@ const MESSAGE_KEY = "noshin.messages.v1";
 const PRESENCE_KEY = "noshin.presence.v1";
 const FOOTSTEPS_KEY = "noshin.footsteps.v1";
 const GHOST_KEY = "noshin.ghostMessages.v1";
+const WALKPOS_NOSHIN_KEY = "noshin.walkpos.noshin.v1";
+const WALKPOS_NABIL_KEY = "noshin.walkpos.nabil.v1";
 
 const DEFAULT_GHOSTS = [
   "hi noshin ♡ keep walking, you're doing great",
@@ -167,6 +169,87 @@ export function removeGhostMessage(idx: number) {
   const all = readGhostMessages();
   all.splice(idx, 1);
   writeGhostMessages(all);
+}
+
+export type WalkPos = {
+  worldX: number;
+  facing: -1 | 1;
+  walking: boolean;
+  ts: number;
+};
+
+export function pingWalkPos(
+  who: "noshin" | "nabil",
+  worldX: number,
+  facing: -1 | 1,
+  walking: boolean,
+) {
+  const key = who === "noshin" ? WALKPOS_NOSHIN_KEY : WALKPOS_NABIL_KEY;
+  const data: WalkPos = { worldX, facing, walking, ts: Date.now() };
+  localStorage.setItem(key, JSON.stringify(data));
+  window.dispatchEvent(new Event("noshin-store-change"));
+}
+
+export function readWalkPos(who: "noshin" | "nabil"): WalkPos | null {
+  if (typeof window === "undefined") return null;
+  const key = who === "noshin" ? WALKPOS_NOSHIN_KEY : WALKPOS_NABIL_KEY;
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+  return safeParse<WalkPos | null>(raw, null);
+}
+
+// Parses freeform proposal time strings into Date for "join now" detection.
+// Supports: "HH:MM", "H:MM AM/PM", "HHMM", "now", "asap".
+// Returns null if unparseable. When parsed time has already passed today,
+// returns today's instance (so we can decide "it's time").
+export function parseProposalTime(s: string): Date | null {
+  if (!s) return null;
+  const t = s.trim().toLowerCase();
+  if (!t || t === "now" || t === "asap" || t === "right now") return new Date();
+  let h: number | null = null;
+  let m = 0;
+  let pm: boolean | null = null;
+  const ampm = t.match(/\b(am|pm)\b/);
+  if (ampm) pm = ampm[1] === "pm";
+  const cleaned = t.replace(/\b(am|pm)\b/g, "").trim();
+  let mm = cleaned.match(/^(\d{1,2}):(\d{2})/);
+  if (mm) {
+    h = Number(mm[1]);
+    m = Number(mm[2]);
+  } else {
+    mm = cleaned.match(/^(\d{1,2})$/);
+    if (mm) {
+      h = Number(mm[1]);
+      m = 0;
+    } else {
+      mm = cleaned.match(/^(\d{3,4})$/);
+      if (mm) {
+        const v = mm[1];
+        h = Number(v.slice(0, v.length - 2));
+        m = Number(v.slice(-2));
+      }
+    }
+  }
+  if (h === null || isNaN(h) || isNaN(m) || m > 59) return null;
+  if (pm === true && h < 12) h += 12;
+  if (pm === false && h === 12) h = 0;
+  if (h > 23) return null;
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d;
+}
+
+// "It's time": within JOIN_WINDOW_MS before scheduled time, up to JOIN_TAIL_MS after.
+const JOIN_WINDOW_MS = 15 * 60 * 1000;
+const JOIN_TAIL_MS = 60 * 60 * 1000;
+
+export function isJoinTime(p: Proposal): boolean {
+  if (p.responded !== "accepted") return false;
+  const target = parseProposalTime(p.time);
+  if (!target) return true; // unparseable → always offer join after accept
+  const now = Date.now();
+  const t = target.getTime();
+  return now >= t - JOIN_WINDOW_MS && now <= t + JOIN_TAIL_MS;
 }
 
 export function readFootsteps(): number {
