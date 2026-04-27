@@ -21,6 +21,7 @@ const FOOTSTEPS_KEY = "noshin.footsteps.v1";
 const GHOST_KEY = "noshin.ghostMessages.v1";
 const WALKPOS_NOSHIN_KEY = "noshin.walkpos.noshin.v1";
 const WALKPOS_NABIL_KEY = "noshin.walkpos.nabil.v1";
+const SCENE_KEY = "noshin.scene.v1";
 
 const DEFAULT_GHOSTS = [
   "hi noshin ♡ keep walking, you're doing great",
@@ -243,13 +244,127 @@ export function parseProposalTime(s: string): Date | null {
 const JOIN_WINDOW_MS = 15 * 60 * 1000;
 const JOIN_TAIL_MS = 60 * 60 * 1000;
 
+// Named time-of-day periods used both in proposals and in scene.
+export const TIME_PERIODS = ["morning", "noon", "afternoon", "evening", "night"] as const;
+export type TimePeriod = (typeof TIME_PERIODS)[number];
+
+const PERIOD_HOURS: Record<TimePeriod, [number, number]> = {
+  morning: [6, 11],
+  noon: [11, 14],
+  afternoon: [14, 17],
+  evening: [17, 20],
+  night: [20, 24],
+};
+
+function periodFromString(s: string): TimePeriod | null {
+  const t = s.trim().toLowerCase();
+  if (!t) return null;
+  for (const p of TIME_PERIODS) if (t === p || t.includes(p)) return p;
+  return null;
+}
+
+export function currentPeriod(): TimePeriod {
+  const h = new Date().getHours();
+  for (const p of TIME_PERIODS) {
+    const [a, b] = PERIOD_HOURS[p];
+    if (h >= a && h < b) return p;
+  }
+  return "night";
+}
+
 export function isJoinTime(p: Proposal): boolean {
   if (p.responded !== "accepted") return false;
+  // Named period proposals: it's "time" the entire period today.
+  const period = periodFromString(p.time);
+  if (period) return currentPeriod() === period;
   const target = parseProposalTime(p.time);
   if (!target) return true; // unparseable → always offer join after accept
   const now = Date.now();
   const t = target.getTime();
   return now >= t - JOIN_WINDOW_MS && now <= t + JOIN_TAIL_MS;
+}
+
+// World scene: time-of-day, weather, theme. Stored shared so both sides
+// see the same world. Rotates every SCENE_DURATION_MS so the walk feels alive.
+export type Weather = "clear" | "rain" | "storm" | "rainbow";
+export type Theme = "cherry" | "garden" | "market" | "park";
+
+export type WorldScene = {
+  timeOfDay: TimePeriod;
+  weather: Weather;
+  theme: Theme;
+  startedAt: number;
+  rotateAt: number;
+};
+
+const SCENE_DURATION_MS = 4 * 60 * 1000;
+
+function pickWeighted<T>(entries: [T, number][]): T {
+  const total = entries.reduce((s, [, w]) => s + w, 0);
+  let r = Math.random() * total;
+  for (const [v, w] of entries) {
+    r -= w;
+    if (r <= 0) return v;
+  }
+  return entries[entries.length - 1][0];
+}
+
+function rollScene(prev?: WorldScene | null): WorldScene {
+  const timeOfDay = currentPeriod();
+  // Weighted weather — clear most common, rain occasional, storm/rainbow rare.
+  const weather = pickWeighted<Weather>([
+    ["clear", 60],
+    ["rain", 22],
+    ["rainbow", 10],
+    ["storm", 8],
+  ]);
+  // Theme — pick something different from previous when possible.
+  const themes: Theme[] = ["cherry", "garden", "market", "park"];
+  const choices = prev ? themes.filter((t) => t !== prev.theme) : themes;
+  const theme = choices[Math.floor(Math.random() * choices.length)];
+  const now = Date.now();
+  return {
+    timeOfDay,
+    weather,
+    theme,
+    startedAt: now,
+    rotateAt: now + SCENE_DURATION_MS,
+  };
+}
+
+export function readWorldScene(): WorldScene {
+  if (typeof window === "undefined") {
+    return rollScene();
+  }
+  const raw = localStorage.getItem(SCENE_KEY);
+  const prev = raw ? safeParse<WorldScene | null>(raw, null) : null;
+  if (!prev || Date.now() >= prev.rotateAt) {
+    const next = rollScene(prev);
+    localStorage.setItem(SCENE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new Event("noshin-store-change"));
+    return next;
+  }
+  // If real time-of-day no longer matches stored, refresh that field
+  // without rotating weather/theme — keeps sky correct as hours pass.
+  const now = currentPeriod();
+  if (prev.timeOfDay !== now) {
+    const updated: WorldScene = { ...prev, timeOfDay: now };
+    localStorage.setItem(SCENE_KEY, JSON.stringify(updated));
+    return updated;
+  }
+  return prev;
+}
+
+export function forceRollScene(): WorldScene {
+  const prev = typeof window !== "undefined"
+    ? safeParse<WorldScene | null>(localStorage.getItem(SCENE_KEY), null)
+    : null;
+  const next = rollScene(prev);
+  if (typeof window !== "undefined") {
+    localStorage.setItem(SCENE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new Event("noshin-store-change"));
+  }
+  return next;
 }
 
 export function readFootsteps(): number {

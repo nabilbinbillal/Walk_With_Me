@@ -11,7 +11,13 @@ import {
   readGhostMessages,
   readMessages,
   readWalkPos,
+  readWorldScene,
+  TIME_PERIODS,
   useStoreSubscribe,
+  type TimePeriod,
+  type Weather,
+  type Theme,
+  type WorldScene,
 } from "@/lib/store";
 
 type Mode = "noshin" | "nabil";
@@ -25,26 +31,200 @@ const SPRITE_W = 24;
 const SPRITE_H = 32;
 const GROUND_Y_RATIO = 0.78;
 
-function drawSky(ctx: CanvasRenderingContext2D, w: number, h: number) {
+type SkyPalette = {
+  top: string;
+  mid: string;
+  bottom: string;
+  ground: string;
+  groundShadow: string;
+  hill: string;
+  pathDash: string;
+};
+
+function paletteFor(time: TimePeriod): SkyPalette {
+  switch (time) {
+    case "morning":
+      return {
+        top: "#ffe6c2",
+        mid: "#ffc097",
+        bottom: "#ff9aa8",
+        ground: "#7a3a4a",
+        groundShadow: "#5e2c39",
+        hill: "#c97e6a",
+        pathDash: "#ffd9c2",
+      };
+    case "noon":
+      return {
+        top: "#a7d8ff",
+        mid: "#cfe9ff",
+        bottom: "#ffe7c2",
+        ground: "#6e4631",
+        groundShadow: "#4d3122",
+        hill: "#9a7d54",
+        pathDash: "#ffe9c2",
+      };
+    case "afternoon":
+      return {
+        top: "#ffd6a2",
+        mid: "#ffb47d",
+        bottom: "#ff8aa6",
+        ground: "#7a3a4a",
+        groundShadow: "#5e2c39",
+        hill: "#c97e6a",
+        pathDash: "#ffd9c2",
+      };
+    case "evening":
+      return {
+        top: "#7a4f99",
+        mid: "#cf6e93",
+        bottom: "#ff8a73",
+        ground: "#3d2440",
+        groundShadow: "#27172a",
+        hill: "#7a3f5c",
+        pathDash: "#ffc1c8",
+      };
+    case "night":
+      return {
+        top: "#0e1530",
+        mid: "#1f254a",
+        bottom: "#3e2c5b",
+        ground: "#1c1430",
+        groundShadow: "#0e0a1d",
+        hill: "#3a2c5a",
+        pathDash: "#cfb8ff",
+      };
+  }
+}
+
+function drawSky(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  pal: SkyPalette,
+) {
   const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, "#ffe6c2");
-  g.addColorStop(0.55, "#ffc097");
-  g.addColorStop(1, "#ff9aa8");
+  g.addColorStop(0, pal.top);
+  g.addColorStop(0.55, pal.mid);
+  g.addColorStop(1, pal.bottom);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 }
 
-function drawSun(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const cx = w * 0.78;
-  const cy = h * 0.28;
-  ctx.fillStyle = "#fff2d4";
+function drawStars(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
+  // Deterministic star field — twinkles using time.
+  ctx.fillStyle = "#ffffff";
+  for (let i = 0; i < 70; i++) {
+    const sx = (i * 53) % w;
+    const sy = (i * 89) % (h * 0.55);
+    const tw = 0.6 + 0.4 * Math.sin(t * 0.003 + i);
+    const s = Math.max(1, Math.round(tw * 2));
+    ctx.globalAlpha = 0.4 + 0.6 * tw;
+    ctx.fillRect(sx, sy, s, s);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawSunOrMoon(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  time: TimePeriod,
+) {
+  // Position varies slightly with time of day.
+  let cx = w * 0.78;
+  let cy = h * 0.28;
+  if (time === "morning") cy = h * 0.36;
+  if (time === "evening") cy = h * 0.42;
+  if (time === "noon") cy = h * 0.18;
+  const r = Math.min(w, h) * 0.09;
+  if (time === "night") {
+    // Moon
+    ctx.fillStyle = "#f1ecd0";
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    // crescent shadow
+    ctx.fillStyle = "rgba(14,21,48,0.85)";
+    ctx.beginPath();
+    ctx.arc(cx + r * 0.45, cy - r * 0.15, r * 0.95, 0, Math.PI * 2);
+    ctx.fill();
+    // glow
+    ctx.fillStyle = "rgba(241, 236, 208, 0.18)";
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = "#fff2d4";
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255, 230, 200, 0.5)";
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawRainbow(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const cx = w * 0.5;
+  const cy = h * 0.95;
+  const baseR = Math.min(w, h) * 0.55;
+  const colors = ["#ff6b8a", "#ffa64a", "#ffe066", "#7be59a", "#5ec6ff", "#a880ff"];
+  ctx.lineWidth = 8;
+  for (let i = 0; i < colors.length; i++) {
+    ctx.strokeStyle = colors[i];
+    ctx.globalAlpha = 0.55;
+    ctx.beginPath();
+    ctx.arc(cx, cy, baseR - i * 8, Math.PI, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawRain(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  t: number,
+  intense: boolean,
+) {
+  // tile-based animated rain
+  const count = intense ? 140 : 80;
+  ctx.strokeStyle = intense ? "rgba(220,230,255,0.85)" : "rgba(220,230,255,0.65)";
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.arc(cx, cy, Math.min(w, h) * 0.09, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "rgba(255, 230, 200, 0.5)";
+  for (let i = 0; i < count; i++) {
+    const seedX = (i * 73) % w;
+    const seedY = (i * 47) % h;
+    const fall = ((t * 0.6 + seedY) % h);
+    const x = (seedX + i * 11) % w;
+    ctx.moveTo(x, fall);
+    ctx.lineTo(x - 6, fall + 12);
+  }
+  ctx.stroke();
+}
+
+function drawLightning(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  t: number,
+) {
+  // Flash every ~3.5s for ~120ms
+  const phase = (t % 3500) / 3500;
+  if (phase > 0.04) return;
+  ctx.fillStyle = `rgba(255,255,255,${0.6 - phase * 10})`;
+  ctx.fillRect(0, 0, w, h);
+  // bolt
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(cx, cy, Math.min(w, h) * 0.13, 0, Math.PI * 2);
-  ctx.fill();
+  const bx = w * (0.3 + (t % 7) / 9);
+  ctx.moveTo(bx, 0);
+  ctx.lineTo(bx - 18, h * 0.18);
+  ctx.lineTo(bx + 4, h * 0.22);
+  ctx.lineTo(bx - 26, h * 0.42);
+  ctx.stroke();
 }
 
 function drawClouds(
@@ -91,10 +271,11 @@ function drawHills(
   w: number,
   h: number,
   scrollX: number,
+  pal: SkyPalette,
 ) {
   const groundY = h * GROUND_Y_RATIO;
   const offset = (scrollX * 0.3) % w;
-  ctx.fillStyle = "#c97e6a";
+  ctx.fillStyle = pal.hill;
   for (let i = -1; i < 4; i++) {
     const baseX = i * (w * 0.5) - offset;
     pixelHill(ctx, baseX, groundY, w * 0.5, h * 0.18);
@@ -121,19 +302,20 @@ function drawGround(
   w: number,
   h: number,
   scrollX: number,
+  pal: SkyPalette,
 ) {
   const groundY = h * GROUND_Y_RATIO;
-  ctx.fillStyle = "#7a3a4a";
+  ctx.fillStyle = pal.ground;
   ctx.fillRect(0, groundY, w, h - groundY);
   // dashed path lines
-  ctx.fillStyle = "#ffd9c2";
+  ctx.fillStyle = pal.pathDash;
   const dash = 28;
   const offset = scrollX % (dash * 2);
   for (let x = -offset; x < w; x += dash * 2) {
     ctx.fillRect(x, groundY + (h - groundY) * 0.45, dash, 4);
   }
   // little tufts
-  ctx.fillStyle = "#5e2c39";
+  ctx.fillStyle = pal.groundShadow;
   const tuftOffset = scrollX % 60;
   for (let x = -tuftOffset; x < w; x += 60) {
     ctx.fillRect(x, groundY + 8, 4, 4);
@@ -187,17 +369,184 @@ function drawScenery(
   w: number,
   h: number,
   scrollX: number,
+  theme: Theme,
+  time: TimePeriod,
 ) {
   const groundY = h * GROUND_Y_RATIO;
-  const offset = scrollX % (w * 0.8);
-  for (let i = -1; i < 4; i++) {
-    const baseX = i * (w * 0.4) - offset;
-    drawTree(ctx, baseX + 40, groundY);
+
+  if (theme === "cherry") {
+    const offset = scrollX % (w * 0.8);
+    for (let i = -1; i < 4; i++) {
+      const baseX = i * (w * 0.4) - offset;
+      drawTree(ctx, baseX + 40, groundY);
+    }
+    const flowerOffset = scrollX % 90;
+    for (let x = -flowerOffset; x < w; x += 90) {
+      drawFlower(ctx, x, groundY);
+    }
+  } else if (theme === "garden") {
+    // hedges + lots of mixed flowers + a butterfly
+    const hedgeOffset = scrollX % 220;
+    for (let x = -hedgeOffset; x < w; x += 220) {
+      drawHedge(ctx, x, groundY);
+    }
+    const flowerOffset = scrollX % 32;
+    const palette = ["#fff5fb", "#ffe066", "#ffb1d4", "#c5a8ff", "#ffffff"];
+    for (let x = -flowerOffset, i = 0; x < w; x += 32, i++) {
+      drawFlowerColored(ctx, x, groundY, palette[(i + Math.floor(scrollX / 32)) % palette.length]);
+    }
+    // butterfly that drifts
+    const bx = (w * 0.3 + Math.sin(scrollX * 0.01) * 60);
+    const by = h * 0.55 + Math.sin(scrollX * 0.04) * 8;
+    drawButterfly(ctx, bx, by);
+  } else if (theme === "market") {
+    const stallOffset = scrollX % (w * 0.5);
+    for (let i = -1; i < 3; i++) {
+      const baseX = i * (w * 0.5) - stallOffset;
+      drawStall(ctx, baseX + 30, groundY, i % 2 === 0);
+    }
+    // a few lanterns hanging
+    const lanternOffset = scrollX % 110;
+    for (let x = -lanternOffset; x < w; x += 110) {
+      drawLantern(ctx, x, groundY - 110, time === "night" || time === "evening");
+    }
+  } else if (theme === "park") {
+    const benchOffset = scrollX % (w * 0.45);
+    for (let i = -1; i < 3; i++) {
+      const baseX = i * (w * 0.45) - benchOffset;
+      drawLamp(ctx, baseX + 30, groundY, time === "night" || time === "evening");
+      drawBench(ctx, baseX + 160, groundY);
+    }
+    const flowerOffset = scrollX % 70;
+    for (let x = -flowerOffset; x < w; x += 70) {
+      drawFlower(ctx, x, groundY);
+    }
   }
-  const flowerOffset = scrollX % 90;
-  for (let x = -flowerOffset; x < w; x += 90) {
-    drawFlower(ctx, x, groundY);
+}
+
+function drawHedge(ctx: CanvasRenderingContext2D, x: number, groundY: number) {
+  ctx.fillStyle = "#3e7a4a";
+  ctx.fillRect(x, groundY - 22, 70, 22);
+  ctx.fillStyle = "#5aa365";
+  for (let i = 0; i < 70; i += 6) {
+    ctx.fillRect(x + i, groundY - 24, 4, 4);
   }
+  ctx.fillStyle = "#ffb1d4";
+  ctx.fillRect(x + 12, groundY - 26, 3, 3);
+  ctx.fillRect(x + 38, groundY - 26, 3, 3);
+  ctx.fillRect(x + 56, groundY - 26, 3, 3);
+}
+
+function drawFlowerColored(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  groundY: number,
+  color: string,
+) {
+  ctx.fillStyle = "#3a1f25";
+  ctx.fillRect(x + 2, groundY - 8, 2, 8);
+  ctx.fillStyle = color;
+  ctx.fillRect(x, groundY - 12, 2, 2);
+  ctx.fillRect(x + 4, groundY - 12, 2, 2);
+  ctx.fillRect(x + 2, groundY - 14, 2, 2);
+  ctx.fillRect(x + 2, groundY - 10, 2, 2);
+  ctx.fillStyle = "#ffe066";
+  ctx.fillRect(x + 2, groundY - 12, 2, 2);
+}
+
+function drawButterfly(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  ctx.fillStyle = "#ff7aa2";
+  ctx.fillRect(x, y, 4, 4);
+  ctx.fillRect(x + 6, y, 4, 4);
+  ctx.fillStyle = "#ffd6e6";
+  ctx.fillRect(x - 2, y + 2, 2, 2);
+  ctx.fillRect(x + 10, y + 2, 2, 2);
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(x + 4, y + 1, 2, 4);
+}
+
+function drawStall(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  groundY: number,
+  altColor: boolean,
+) {
+  // posts
+  ctx.fillStyle = "#3a1f25";
+  ctx.fillRect(x, groundY - 60, 4, 60);
+  ctx.fillRect(x + 60, groundY - 60, 4, 60);
+  // roof — striped
+  const a = altColor ? "#d94e7c" : "#4ea3ff";
+  const b = "#fff5fb";
+  for (let i = 0; i < 8; i++) {
+    ctx.fillStyle = i % 2 === 0 ? a : b;
+    ctx.fillRect(x + i * 8, groundY - 70, 8, 12);
+  }
+  // counter
+  ctx.fillStyle = "#a06a4a";
+  ctx.fillRect(x, groundY - 30, 64, 8);
+  // goods (apples / fish)
+  ctx.fillStyle = altColor ? "#ff5050" : "#ffd86b";
+  ctx.fillRect(x + 6, groundY - 36, 6, 6);
+  ctx.fillRect(x + 18, groundY - 36, 6, 6);
+  ctx.fillRect(x + 30, groundY - 36, 6, 6);
+  ctx.fillRect(x + 42, groundY - 36, 6, 6);
+  // sign
+  ctx.fillStyle = "#fff5fb";
+  ctx.fillRect(x + 18, groundY - 56, 28, 10);
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(x + 22, groundY - 52, 4, 2);
+  ctx.fillRect(x + 30, groundY - 52, 4, 2);
+  ctx.fillRect(x + 38, groundY - 52, 4, 2);
+}
+
+function drawLantern(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  glow: boolean,
+) {
+  ctx.fillStyle = "#3a1f25";
+  ctx.fillRect(x + 4, y, 2, 14);
+  ctx.fillStyle = glow ? "#ffd86b" : "#cf8a4a";
+  ctx.fillRect(x, y + 14, 10, 10);
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(x, y + 14, 10, 2);
+  ctx.fillRect(x, y + 22, 10, 2);
+  if (glow) {
+    ctx.fillStyle = "rgba(255, 216, 107, 0.35)";
+    ctx.beginPath();
+    ctx.arc(x + 5, y + 19, 14, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawLamp(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  groundY: number,
+  glow: boolean,
+) {
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(x + 2, groundY - 60, 4, 60);
+  ctx.fillRect(x - 2, groundY - 64, 12, 4);
+  ctx.fillStyle = glow ? "#ffe066" : "#cfcfcf";
+  ctx.fillRect(x, groundY - 70, 8, 6);
+  if (glow) {
+    ctx.fillStyle = "rgba(255, 224, 102, 0.3)";
+    ctx.beginPath();
+    ctx.arc(x + 4, groundY - 67, 22, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawBench(ctx: CanvasRenderingContext2D, x: number, groundY: number) {
+  ctx.fillStyle = "#7a4f2c";
+  ctx.fillRect(x, groundY - 22, 44, 4);
+  ctx.fillRect(x, groundY - 14, 44, 4);
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(x + 2, groundY - 10, 3, 10);
+  ctx.fillRect(x + 38, groundY - 10, 3, 10);
 }
 
 type Character = {
@@ -410,6 +759,8 @@ export function WalkingGame({ mode, onExit }: Props) {
   const ghostIdxRef = useRef(0);
   const ghostNextSwapRef = useRef(performance.now() + 6000);
   const ghostFloatPhaseRef = useRef(Math.random() * Math.PI * 2);
+  const sceneRef = useRef<WorldScene>(readWorldScene());
+  const [scene, setScene] = useState<WorldScene>(sceneRef.current);
 
   useEffect(() => {
     lockedWalkRef.current = lockedWalk;
@@ -441,6 +792,23 @@ export function WalkingGame({ mode, onExit }: Props) {
     const id = window.setInterval(() => pingPresence(mode), 3000);
     return () => window.clearInterval(id);
   }, [mode]);
+
+  // Scene rotation — poll readWorldScene which auto-rotates after expiry,
+  // and also listen to store changes for instant cross-tab sync.
+  useEffect(() => {
+    const refresh = () => {
+      const next = readWorldScene();
+      sceneRef.current = next;
+      setScene(next);
+    };
+    refresh();
+    const id = window.setInterval(refresh, 5000);
+    const off = useStoreSubscribe(refresh);
+    return () => {
+      window.clearInterval(id);
+      off();
+    };
+  }, []);
 
   // Keyboard input
   useEffect(() => {
@@ -576,13 +944,42 @@ export function WalkingGame({ mode, onExit }: Props) {
         if (otherPos.walking) other.walkFrame += dt * 0.04;
       }
 
-      // draw
-      drawSky(ctx, w, h);
-      drawSun(ctx, w, h);
-      drawClouds(ctx, w, h, scrollXRef.current);
-      drawHills(ctx, w, h, scrollXRef.current);
-      drawScenery(ctx, w, h, scrollXRef.current);
-      drawGround(ctx, w, h, scrollXRef.current);
+      // draw — scene-aware
+      const scene = sceneRef.current;
+      const pal = paletteFor(scene.timeOfDay);
+      drawSky(ctx, w, h, pal);
+      if (scene.timeOfDay === "night") drawStars(ctx, w, h, t);
+      drawSunOrMoon(ctx, w, h, scene.timeOfDay);
+      if (scene.weather === "rainbow") drawRainbow(ctx, w, h);
+      // Clouds dim during night/storm
+      if (scene.weather !== "storm") {
+        drawClouds(ctx, w, h, scrollXRef.current);
+      } else {
+        // dark storm clouds
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = "#2a2638";
+        for (let i = -1; i < 3; i++) {
+          const baseX = (i * (w * 0.55) - (scrollXRef.current * 0.15) % w);
+          const baseY = h * (0.12 + 0.05 * (i % 2));
+          pixelCloud(ctx, baseX, baseY, 16);
+          pixelCloud(ctx, baseX + 220, baseY + 28, 12);
+        }
+        ctx.globalAlpha = 1;
+      }
+      drawHills(ctx, w, h, scrollXRef.current, pal);
+      drawScenery(ctx, w, h, scrollXRef.current, scene.theme, scene.timeOfDay);
+      drawGround(ctx, w, h, scrollXRef.current, pal);
+      // Weather overlay (drawn before characters so they stand out clearly)
+      if (scene.weather === "rain") drawRain(ctx, w, h, t, false);
+      if (scene.weather === "storm") {
+        drawRain(ctx, w, h, t, true);
+        drawLightning(ctx, w, h, t);
+      }
+      // Night vignette
+      if (scene.timeOfDay === "night") {
+        ctx.fillStyle = "rgba(8, 10, 26, 0.25)";
+        ctx.fillRect(0, 0, w, h);
+      }
 
       // characters
       if (mode === "noshin") {
@@ -755,6 +1152,29 @@ export function WalkingGame({ mode, onExit }: Props) {
           }}
         />
 
+        {/* Scene chip (top-left) */}
+        <div
+          className="font-pixel"
+          style={{
+            position: "absolute",
+            top: 12,
+            left: 12,
+            background: "rgba(255,255,255,0.85)",
+            border: "2px solid #1a1a1a",
+            padding: "6px 10px",
+            fontSize: 9,
+            lineHeight: 1.4,
+            boxShadow: "2px 2px 0 0 #1a1a1a",
+            maxWidth: 200,
+          }}
+        >
+          ♡ {scene.timeOfDay.toUpperCase()}
+          {" · "}
+          {scene.weather === "clear" ? "CLEAR" : scene.weather.toUpperCase()}
+          {" · "}
+          {scene.theme.toUpperCase()}
+        </div>
+
         {/* On-screen action buttons (top right of game) */}
         <div
           style={{
@@ -781,6 +1201,18 @@ export function WalkingGame({ mode, onExit }: Props) {
             PLAN
           </button>
         </div>
+
+        {/* Nabil's contextual quick-send chips — only on Nabil's walk page */}
+        {mode === "nabil" && (
+          <QuickSendChips
+            scene={scene}
+            onSend={(text) => {
+              addMessage("nabil", text);
+              setBubble({ from: "nabil", text });
+              window.setTimeout(() => setBubble(null), 4000);
+            }}
+          />
+        )}
       </div>
 
       {/* Bottom controls: joystick */}
@@ -864,11 +1296,37 @@ export function WalkingGame({ mode, onExit }: Props) {
           <div className="font-mono-retro" style={{ fontSize: 18, marginBottom: 8 }}>
             when do you want to walk together?
           </div>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 6,
+              marginBottom: 10,
+            }}
+          >
+            {TIME_PERIODS.map((p) => (
+              <button
+                key={p}
+                onClick={() => setProposalTime(p)}
+                className="font-pixel"
+                style={{
+                  fontSize: 9,
+                  padding: "6px 10px",
+                  border: "2px solid #1a1a1a",
+                  background: proposalTime === p ? "#ff7aa2" : "#fff",
+                  color: proposalTime === p ? "#fff" : "#1a1a1a",
+                  cursor: "pointer",
+                }}
+              >
+                {p.toUpperCase()}
+              </button>
+            ))}
+          </div>
           <input
             className="pixel-input"
             value={proposalTime}
             onChange={(e) => setProposalTime(e.target.value)}
-            placeholder="e.g. tomorrow 6 pm"
+            placeholder="or type a time, e.g. 6:30 pm"
             style={{ marginBottom: 10 }}
             autoFocus
           />
@@ -888,6 +1346,119 @@ export function WalkingGame({ mode, onExit }: Props) {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+function QuickSendChips({
+  scene,
+  onSend,
+}: {
+  scene: WorldScene;
+  onSend: (text: string) => void;
+}) {
+  const chips: { label: string; text: string }[] = [];
+  // Weather-aware chips
+  if (scene.weather === "rain") {
+    chips.push({
+      label: "♡ rain reminds me of you",
+      text: "rain reminds me of you noshin ♡",
+    });
+    chips.push({
+      label: "stay dry pls",
+      text: "wherever you are, stay dry noshin ♡",
+    });
+  }
+  if (scene.weather === "rainbow") {
+    chips.push({
+      label: "♡ look up, rainbow!",
+      text: "noshin look up, a rainbow! that's for us ♡",
+    });
+  }
+  if (scene.weather === "storm") {
+    chips.push({
+      label: "stay safe ♡",
+      text: "the sky is wild, stay safe pretty noshin",
+    });
+  }
+  // Time-of-day chips
+  if (scene.timeOfDay === "morning") {
+    chips.push({
+      label: "good morning",
+      text: "good morning my pretty noshin ☀ ♡",
+    });
+  }
+  if (scene.timeOfDay === "evening") {
+    chips.push({
+      label: "this sunset is for you",
+      text: "this sunset reminds me of you noshin ♡",
+    });
+  }
+  if (scene.timeOfDay === "night") {
+    chips.push({
+      label: "the stars 🌙",
+      text: "the stars are pretty tonight, but you're prettier noshin ♡",
+    });
+  }
+  // Theme-aware chips
+  if (scene.theme === "garden") {
+    chips.push({
+      label: "this garden is you",
+      text: "this whole garden is full of you noshin ♡",
+    });
+  }
+  if (scene.theme === "market") {
+    chips.push({
+      label: "buy you everything",
+      text: "i'd buy you everything in this market noshin",
+    });
+  }
+  if (scene.theme === "park") {
+    chips.push({
+      label: "let's sit a while",
+      text: "let's sit on a park bench together someday noshin ♡",
+    });
+  }
+  if (scene.theme === "cherry") {
+    chips.push({
+      label: "petals are pink like you",
+      text: "the petals are as pink as your cheeks noshin ♡",
+    });
+  }
+  // always-available "miss you" fallback
+  chips.push({ label: "♡ miss you", text: "i miss you noshin ♡" });
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 12,
+        bottom: 12,
+        right: 12,
+        display: "flex",
+        gap: 6,
+        flexWrap: "wrap",
+        maxWidth: "70%",
+      }}
+    >
+      {chips.slice(0, 4).map((c) => (
+        <button
+          key={c.label}
+          className="font-pixel"
+          onClick={() => onSend(c.text)}
+          style={{
+            fontSize: 9,
+            padding: "8px 10px",
+            border: "2px solid #1a1a1a",
+            background: "rgba(255,255,255,0.92)",
+            boxShadow: "2px 2px 0 0 #1a1a1a",
+            cursor: "pointer",
+            lineHeight: 1.2,
+          }}
+        >
+          {c.label.toUpperCase()}
+        </button>
+      ))}
     </div>
   );
 }
