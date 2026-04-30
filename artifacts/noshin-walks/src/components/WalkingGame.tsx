@@ -888,8 +888,8 @@ export function WalkingGame({ mode, onExit }: Props) {
       }
     };
 
-    // Poll every 1 second for real-time updates
-    const id = window.setInterval(pollServer, 1000);
+    // Poll every 500ms for a more real-time feel
+    const id = window.setInterval(pollServer, 500);
     return () => window.clearInterval(id);
   }, [mode]);
 
@@ -1046,7 +1046,7 @@ export function WalkingGame({ mode, onExit }: Props) {
         // Smooth interpolate toward target for a less jittery look.
         other.x = other.x === 0
           ? drawX
-          : other.x + (drawX - other.x) * Math.min(1, dt * 0.02);
+          : other.x + (drawX - other.x) * Math.min(1, dt * 0.012);
         other.jumpY = otherPos.jumpY ?? 0;
         other.y = groundY - SPRITE_H - other.jumpY;
         other.facing = otherPos.facing;
