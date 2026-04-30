@@ -126,11 +126,17 @@ export function pingPresence(who: "noshin" | "nabil") {
         const merged = {
           ...current,
           ...serverPresence,
-          // Keep local lastSeen if it's newer (shouldn't happen but safe)
+          // Keep local lastSeen if it's newer
           nabilLastSeen: Math.max(current.nabilLastSeen, serverPresence.nabilLastSeen),
           noshinLastSeen: Math.max(current.noshinLastSeen, serverPresence.noshinLastSeen),
         };
         localStorage.setItem(PRESENCE_KEY, JSON.stringify(merged));
+        
+        // Sync ghost messages if server has them
+        if (serverPresence.ghostMessages) {
+          localStorage.setItem(GHOST_KEY, JSON.stringify(serverPresence.ghostMessages));
+        }
+        
         window.dispatchEvent(new Event("noshin-store-change"));
       }
     }).catch(() => {});
@@ -225,14 +231,24 @@ export function addGhostMessage(text: string) {
   const t = text.trim();
   if (!t) return;
   const all = readGhostMessages();
-  all.unshift(t);
-  writeGhostMessages(all.slice(0, 30));
+  const next = [t, ...all].slice(0, 50);
+  writeGhostMessages(next);
+  
+  // Sync with API
+  import('./api').then(({ syncGhostMessages }) => {
+    syncGhostMessages(next).catch(() => {});
+  });
 }
 
 export function removeGhostMessage(idx: number) {
   const all = readGhostMessages();
-  all.splice(idx, 1);
-  writeGhostMessages(all);
+  const next = all.filter((_, i) => i !== idx);
+  writeGhostMessages(next);
+  
+  // Sync with API
+  import('./api').then(({ syncGhostMessages }) => {
+    syncGhostMessages(next).catch(() => {});
+  });
 }
 
 export type WalkPos = {

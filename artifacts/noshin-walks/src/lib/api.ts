@@ -6,6 +6,7 @@ export type Presence = {
   nabilWalking?: boolean;
   noshinWalking?: boolean;
   noshinWalkingAlone?: boolean;
+  ghostMessages?: string[];
 };
 
 export type WalkPos = {
@@ -73,5 +74,17 @@ export async function getChatMessages(): Promise<Array<{from: 'noshin' | 'nabil'
     return await res.json();
   } catch {
     return [];
+  }
+}
+
+export async function syncGhostMessages(messages: string[]): Promise<void> {
+  try {
+    await fetch(`${API_URL}/api/ghost-messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages })
+    });
+  } catch {
+    // Fallback to localStorage
   }
 }

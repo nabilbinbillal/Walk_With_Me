@@ -769,6 +769,11 @@ export function WalkingGame({ mode, onExit }: Props) {
     jumpY: 0,
     jumpVy: 0,
   });
+  
+  const ghostMsgIndexRef = useRef(0);
+  const ghostMsgTimerRef = useRef(0);
+  const ghostXRef = useRef(0);
+  const ghostYRef = useRef(0);
   const messagesRef = useRef(readMessages());
   const lastMsgIdRef = useRef<string | null>(
     messagesRef.current[messagesRef.current.length - 1]?.id ?? null,
@@ -1032,7 +1037,7 @@ export function WalkingGame({ mode, onExit }: Props) {
       const other = otherCharRef.current;
       const otherSide: Mode = mode === "noshin" ? "nabil" : "noshin";
       const otherPos = readWalkPos(otherSide);
-      const POS_FRESH_MS = 6000;
+      const POS_FRESH_MS = 10000;
       const presence = readPresence();
       
       // Hide Noshin from Nabil if she's walking alone
@@ -1115,20 +1120,38 @@ export function WalkingGame({ mode, onExit }: Props) {
       if (mode === "noshin" && !otherIsPresent) {
         ghostFloatPhaseRef.current += dt * 0.003;
         const bob = Math.sin(ghostFloatPhaseRef.current) * 8;
-        // Position ghost Nabil slightly behind and above Noshin
-        const ghostX = me.x - 40; 
-        const ghostY = me.y - 45 + bob;
         
-        drawSkyGhost(ctx, ghostX, ghostY);
+        // Target position: slightly behind and above Noshin
+        const targetGX = me.x - 45;
+        const targetGY = me.y - 60 + bob;
         
-        // Ghostly speech bubble
-        const text = "noshin wait for me i am coming gurl ♡";
+        // Smoothly follow Noshin instead of snapping
+        if (ghostXRef.current === 0) {
+          ghostXRef.current = targetGX;
+          ghostYRef.current = targetGY;
+        } else {
+          ghostXRef.current += (targetGX - ghostXRef.current) * Math.min(1, dt * 0.005);
+          ghostYRef.current += (targetGY - ghostYRef.current) * Math.min(1, dt * 0.005);
+        }
+        
+        drawSkyGhost(ctx, ghostXRef.current, ghostYRef.current);
+        
+        // Cycle through ghost messages
+        ghostMsgTimerRef.current += dt;
+        const ghosts = readGhostMessages();
+        if (ghostMsgTimerRef.current > 6000 && ghosts.length > 0) {
+          ghostMsgTimerRef.current = 0;
+          ghostMsgIndexRef.current = (ghostMsgIndexRef.current + 1) % ghosts.length;
+        }
+        
+        const text = ghosts.length > 0 ? ghosts[ghostMsgIndexRef.current] : "hi noshin ♡";
+        
         ctx.font = "18px VT323, monospace";
         const tw = ctx.measureText(text).width;
         const bw = tw + 20;
         const bh = 28;
-        const bx = ghostX + 24;
-        const by = ghostY - 10;
+        const bx = ghostXRef.current + 24;
+        const by = ghostYRef.current - 10;
         
         ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
         ctx.strokeStyle = "#1a1a1a";
@@ -1138,6 +1161,10 @@ export function WalkingGame({ mode, onExit }: Props) {
         
         ctx.fillStyle = "#1a1a1a";
         ctx.fillText(text, bx + 10, by + 19);
+      } else {
+        // Reset ghost position when Nabil returns
+        ghostXRef.current = 0;
+        ghostYRef.current = 0;
       }
 
       // HUD bubble
