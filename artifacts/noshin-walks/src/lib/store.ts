@@ -126,12 +126,37 @@ export function pingPresence(who: "noshin" | "nabil") {
   window.dispatchEvent(new Event("noshin-store-change"));
 }
 
-export function isNabilHere(graceMs = 8000): boolean {
+export async function isNabilHere(graceMs = 8000): Promise<boolean> {
+  try {
+    const { syncPresence } = await import('./api');
+    const presence = await syncPresence('noshin'); // This will update from server
+    return Date.now() - presence.nabilLastSeen < graceMs;
+  } catch {
+    // Fallback to localStorage
+    const p = readPresence();
+    return Date.now() - p.nabilLastSeen < graceMs;
+  }
+}
+
+export async function isNoshinHere(graceMs = 8000): Promise<boolean> {
+  try {
+    const { syncPresence } = await import('./api');
+    const presence = await syncPresence('nabil'); // This will update from server
+    return Date.now() - presence.noshinLastSeen < graceMs;
+  } catch {
+    // Fallback to localStorage
+    const p = readPresence();
+    return Date.now() - p.noshinLastSeen < graceMs;
+  }
+}
+
+// Sync versions for immediate checks
+export function isNabilHereSync(graceMs = 8000): boolean {
   const p = readPresence();
   return Date.now() - p.nabilLastSeen < graceMs;
 }
 
-export function isNoshinHere(graceMs = 8000): boolean {
+export function isNoshinHereSync(graceMs = 8000): boolean {
   const p = readPresence();
   return Date.now() - p.noshinLastSeen < graceMs;
 }

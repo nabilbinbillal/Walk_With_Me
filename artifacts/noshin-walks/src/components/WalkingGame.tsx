@@ -4,8 +4,8 @@ import {
   addFootsteps,
   addMessage,
   addProposal,
-  isNabilHere,
-  isNoshinHere,
+  isNabilHereSync,
+  isNoshinHereSync,
   pingPresence,
   pingWalkPos,
   readGhostMessages,
@@ -20,6 +20,7 @@ import {
   type Theme,
   type WorldScene,
 } from "@/lib/store";
+import { getWalkPos } from "@/lib/api";
 
 type Mode = "noshin" | "nabil";
 
@@ -553,6 +554,7 @@ function drawBench(ctx: CanvasRenderingContext2D, x: number, groundY: number) {
 type Character = {
   x: number;
   y: number;
+  worldX: number;
   facing: 1 | -1;
   walkFrame: number;
   walking: boolean;
@@ -744,7 +746,8 @@ export function WalkingGame({ mode, onExit }: Props) {
   const myCharRef = useRef<Character>({
     x: 0,
     y: 0,
-    facing: 1,
+    worldX: 0,
+    facing: -1,
     walkFrame: 0,
     walking: false,
     jumpY: 0,
@@ -753,6 +756,7 @@ export function WalkingGame({ mode, onExit }: Props) {
   const otherCharRef = useRef<Character>({
     x: 0,
     y: 0,
+    worldX: 0,
     facing: -1,
     walkFrame: 0,
     walking: false,
@@ -817,6 +821,31 @@ export function WalkingGame({ mode, onExit }: Props) {
       off();
     };
   }, []);
+
+  // API polling for real-time multiplayer sync
+  useEffect(() => {
+    const pollServer = async () => {
+      try {
+        const otherSide: Mode = mode === "noshin" ? "nabil" : "noshin";
+        const otherPos = await getWalkPos(otherSide);
+        
+        if (otherPos) {
+          // Update the other character's position from server
+          const other = otherCharRef.current;
+          other.worldX = otherPos.worldX;
+          other.facing = otherPos.facing;
+          other.walking = otherPos.walking;
+          other.jumpY = otherPos.jumpY || 0;
+        }
+      } catch (error) {
+        // Silently fail - fallback to localStorage
+      }
+    };
+
+    // Poll every 2 seconds for real-time updates
+    const id = window.setInterval(pollServer, 2000);
+    return () => window.clearInterval(id);
+  }, [mode]);
 
   // Keyboard input
   useEffect(() => {
@@ -933,7 +962,7 @@ export function WalkingGame({ mode, onExit }: Props) {
       if (pingNow) {
         lastPingT = t;
         // Check if walking alone (only show to other person if not alone)
-        const otherIsPresent = isNabilHere() || isNoshinHere();
+        const otherIsPresent = isNabilHereSync() || isNoshinHereSync();
         const isAlone = mode === "noshin" && !otherIsPresent;
         
         pingWalkPos(
@@ -1041,6 +1070,7 @@ export function WalkingGame({ mode, onExit }: Props) {
         drawNabil(ctx, {
           x: peekX - SPRITE_W * 0.45,
           y: peekY,
+          worldX: 0,
           facing: 1,
           walkFrame: 0,
           walking: false,
@@ -1160,7 +1190,7 @@ export function WalkingGame({ mode, onExit }: Props) {
         <div style={{ textAlign: "center" }}>
           {meName.toUpperCase()}'S WALK
           <div style={{ fontSize: 8, marginTop: 2, opacity: 0.7 }}>
-            {(mode === "noshin" ? isNabilHere() : isNoshinHere())
+            {(mode === "noshin" ? isNabilHereSync() : isNoshinHereSync())
               ? `${otherName.toUpperCase()} IS HERE`
               : `${otherName.toUpperCase()} NOT HERE`}
           </div>

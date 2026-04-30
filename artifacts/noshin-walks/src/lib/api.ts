@@ -22,8 +22,10 @@ export async function syncPresence(who: 'noshin' | 'nabil'): Promise<Presence> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ who })
     });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
-  } catch {
+  } catch (error) {
+    console.warn('API syncPresence failed:', error);
     return { nabilLastSeen: 0, noshinLastSeen: 0 };
   }
 }
