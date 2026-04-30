@@ -1,3 +1,5 @@
+import { createServer } from "http";
+import { WebSocketServer, WebSocket } from "ws";
 import app from "./app";
 import { logger } from "./lib/logger";
 
@@ -15,11 +17,38 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
+const server = createServer(app);
+const wss = new WebSocketServer({ server });
 
-  logger.info({ port }, "Server listening");
+wss.on("connection", (ws) => {
+  logger.info("New WebSocket connection");
+
+  ws.on("message", (data) => {
+    try {
+      const message = JSON.parse(data.toString());
+      
+      // Broadcast movement to everyone EXCEPT the sender
+      if (message.type === "walk-pos") {
+        wss.clients.forEach((client) => {
+          if (client !== ws && client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(message));
+          }
+        });
+      }
+    } catch (err) {
+      logger.error({ err }, "Error parsing WS message");
+    }
+  });
+
+  ws.on("error", (err) => {
+    logger.error({ err }, "WS error");
+  });
+
+  ws.on("close", () => {
+    logger.info("WS connection closed");
+  });
+});
+
+server.listen(port, () => {
+  logger.info({ port }, "Server listening with WebSockets");
 });

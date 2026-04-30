@@ -8,7 +8,8 @@ const presence = {
   noshinLastSeen: 0,
   nabilWalking: false,
   noshinWalking: false,
-  noshinWalkingAlone: false
+  noshinWalkingAlone: false,
+  ghostMessages: [] as string[]
 };
 
 const walkPositions: Record<string, any> = {};
@@ -71,6 +72,15 @@ router.post('/messages', (req, res) => {
 // Get chat messages
 router.get('/messages', (req, res) => {
   res.json(messages);
+});
+
+// Update ghost messages (whispers)
+router.post('/ghost-messages', (req, res) => {
+  const { messages: nextMessages } = req.body;
+  if (Array.isArray(nextMessages)) {
+    presence.ghostMessages = nextMessages.slice(0, 50);
+  }
+  res.json({ success: true, ghostMessages: presence.ghostMessages });
 });
 
 export default router;
