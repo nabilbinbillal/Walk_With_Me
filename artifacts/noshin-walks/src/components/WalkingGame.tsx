@@ -739,10 +739,12 @@ export function WalkingGame({ mode, onExit }: Props) {
   const [bubble, setBubble] = useState<{ from: Mode; text: string } | null>(
     null,
   );
+  const [sysMessages, setSysMessages] = useState<{ id: string; text: string; ts: number }[]>([]);
   const [ping, setPing] = useState<number | null>(null);
   const [, force] = useState(0);
 
   // refs for game loop
+  const otherOnlineRef = useRef<boolean | null>(null);
   const dirRef = useRef<JoystickDir>(null);
   const keyDirRef = useRef<JoystickDir>(null);
   const lockedWalkRef = useRef(false);
@@ -833,6 +835,16 @@ export function WalkingGame({ mode, onExit }: Props) {
       off();
     };
   }, []);
+
+  // System messages cleanup (fade out after 10 seconds)
+  useEffect(() => {
+    if (sysMessages.length === 0) return;
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setSysMessages(prev => prev.filter(msg => now - msg.ts < 10000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [sysMessages.length]);
 
   // Continuous presence heartbeat (WhatsApp-style)
   useEffect(() => {
@@ -1193,56 +1205,14 @@ export function WalkingGame({ mode, onExit }: Props) {
         if (otherIsPresent) drawNoshin(ctx, other);
       }
 
-      // When Nabil is offline, he appears as a floating ghost companion for Noshin.
-      if (mode === "noshin" && !otherIsPresent) {
-        ghostFloatPhaseRef.current += dt * 0.003;
-        const bob = Math.sin(ghostFloatPhaseRef.current) * 8;
-        
-        // Target position: slightly behind and above Noshin
-        const targetGX = me.x - 45;
-        const targetGY = me.y - 60 + bob;
-        
-        // Smoothly follow Noshin instead of snapping
-        if (ghostXRef.current === 0) {
-          ghostXRef.current = targetGX;
-          ghostYRef.current = targetGY;
-        } else {
-          ghostXRef.current += (targetGX - ghostXRef.current) * Math.min(1, dt * 0.005);
-          ghostYRef.current += (targetGY - ghostYRef.current) * Math.min(1, dt * 0.005);
-        }
-        
-        drawSkyGhost(ctx, ghostXRef.current, ghostYRef.current);
-        
-        // Cycle through ghost messages
-        ghostMsgTimerRef.current += dt;
-        const ghosts = readGhostMessages();
-        if (ghostMsgTimerRef.current > 6000 && ghosts.length > 0) {
-          ghostMsgTimerRef.current = 0;
-          ghostMsgIndexRef.current = (ghostMsgIndexRef.current + 1) % ghosts.length;
-        }
-        
-        const text = ghosts.length > 0 ? ghosts[ghostMsgIndexRef.current] : "hi noshin ♡";
-        
-        ctx.font = "18px VT323, monospace";
-        const tw = ctx.measureText(text).width;
-        const bw = tw + 20;
-        const bh = 28;
-        const bx = ghostXRef.current + 24;
-        const by = ghostYRef.current - 10;
-        
-        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-        ctx.strokeStyle = "#1a1a1a";
-        ctx.lineWidth = 2;
-        ctx.fillRect(bx, by, bw, bh);
-        ctx.strokeRect(bx, by, bw, bh);
-        
-        ctx.fillStyle = "#1a1a1a";
-        ctx.fillText(text, bx + 10, by + 19);
-      } else {
-        // Reset ghost position when Nabil returns
-        ghostXRef.current = 0;
-        ghostYRef.current = 0;
+      if (otherOnlineRef.current !== null && otherOnlineRef.current !== otherIsPresent) {
+        const text = otherIsPresent ? `${otherSide.toUpperCase()} joined the walk.` : `${otherSide.toUpperCase()} left the walk.`;
+        setSysMessages(prev => {
+           const next = [...prev, { id: Math.random().toString(), text, ts: Date.now() }];
+           return next.slice(-5);
+        });
       }
+      otherOnlineRef.current = otherIsPresent;
 
       // HUD bubble
       if (bubble) {
@@ -1486,6 +1456,37 @@ export function WalkingGame({ mode, onExit }: Props) {
             }}
           />
         )}
+
+        {/* System Messages (Minecraft style chat log) */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: 12,
+            left: 12,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+            pointerEvents: "none", // click through it
+          }}
+        >
+          {sysMessages.map((msg) => (
+            <div
+              key={msg.id}
+              className="font-pixel"
+              style={{
+                background: "rgba(0, 0, 0, 0.6)",
+                color: "#fff",
+                padding: "6px 10px",
+                fontSize: 10,
+                borderRadius: 2,
+                textShadow: "1px 1px 0 #000",
+                animation: "fadeIn 0.2s ease-out",
+              }}
+            >
+              {msg.text}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Bottom controls: joystick */}
