@@ -125,9 +125,9 @@ export function Home({ mode }: Props) {
   const [, force] = useState(0);
   const [walkAloneOpen, setWalkAloneOpen] = useState(false);
   const [proposals, setProposals] = useState<Proposal[]>(readProposals());
-  const [nabilHere, setNabilHere] = useState(isNabilHere());
+  const [nabilHere, setNabilHere] = useState(isNabilHereSync());
   const [otherHere, setOtherHere] = useState(
-    mode === "noshin" ? isNabilHere() : isNoshinHere(),
+    mode === "noshin" ? isNabilHereSync() : isNoshinHereSync(),
   );
   const [unread, setUnread] = useState(readMessages().length);
 
@@ -135,8 +135,8 @@ export function Home({ mode }: Props) {
     pingPresence(mode);
     const id = window.setInterval(() => {
       pingPresence(mode);
-      setNabilHere(isNabilHere());
-      setOtherHere(mode === "noshin" ? isNabilHere() : isNoshinHere());
+      setNabilHere(isNabilHereSync());
+      setOtherHere(mode === "noshin" ? isNabilHereSync() : isNoshinHereSync());
       force((v) => v + 1);
     }, 2000);
     return () => window.clearInterval(id);
@@ -145,7 +145,8 @@ export function Home({ mode }: Props) {
   useEffect(() => {
     const off = useStoreSubscribe(() => {
       setProposals(readProposals());
-      setNabilHere(isNabilHere());
+      setNabilHere(isNabilHereSync());
+      setOtherHere(mode === "noshin" ? isNabilHereSync() : isNoshinHereSync());
       setUnread(readMessages().length);
     });
     return off;

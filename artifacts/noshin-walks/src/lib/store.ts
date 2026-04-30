@@ -120,7 +120,20 @@ export function pingPresence(who: "noshin" | "nabil") {
   
   // Sync with API immediately for real-time updates
   import('./api').then(({ syncPresence }) => {
-    syncPresence(who).catch(() => {});
+    syncPresence(who).then(serverPresence => {
+      if (serverPresence) {
+        const current = readPresence();
+        const merged = {
+          ...current,
+          ...serverPresence,
+          // Keep local lastSeen if it's newer (shouldn't happen but safe)
+          nabilLastSeen: Math.max(current.nabilLastSeen, serverPresence.nabilLastSeen),
+          noshinLastSeen: Math.max(current.noshinLastSeen, serverPresence.noshinLastSeen),
+        };
+        localStorage.setItem(PRESENCE_KEY, JSON.stringify(merged));
+        window.dispatchEvent(new Event("noshin-store-change"));
+      }
+    }).catch(() => {});
   });
   
   window.dispatchEvent(new Event("noshin-store-change"));
