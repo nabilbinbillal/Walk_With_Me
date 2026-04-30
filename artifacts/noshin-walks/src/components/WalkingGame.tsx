@@ -882,6 +882,15 @@ export function WalkingGame({ mode, onExit }: Props) {
             // Also update localStorage for fallback
             const key = msg.who === "noshin" ? 'noshin.walkpos.noshin.v1' : 'noshin.walkpos.nabil.v1';
             localStorage.setItem(key, JSON.stringify({ ...msg, ts: Date.now() }));
+          } else if (msg.type === 'chat-msg' && msg.from !== mode) {
+            // Instantly show the bubble for the received message
+            setBubble({ from: msg.from, text: msg.text });
+            window.setTimeout(() => setBubble(null), 4500);
+            
+            // Save to store so it persists
+            import('../lib/store').then(({ addMessage }) => {
+              addMessage(msg.from, msg.text, false); // false to avoid loop sync
+            });
           }
         } catch (e) {
           // Ignore parse errors
@@ -1268,6 +1277,15 @@ export function WalkingGame({ mode, onExit }: Props) {
     setChatText("");
     setBubble({ from: mode, text: t });
     window.setTimeout(() => setBubble(null), 3500);
+
+    // Instant WebSocket broadcast
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        type: 'chat-msg',
+        from: mode,
+        text: t
+      }));
+    }
   };
 
   const sendProposal = () => {

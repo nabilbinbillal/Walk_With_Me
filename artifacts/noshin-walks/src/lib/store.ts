@@ -81,7 +81,7 @@ export function writeMessages(items: ChatMessage[]) {
   window.dispatchEvent(new Event("noshin-store-change"));
 }
 
-export function addMessage(from: "noshin" | "nabil", text: string) {
+export function addMessage(from: "noshin" | "nabil", text: string, sync = true) {
   if (!text.trim()) return;
   const all = readMessages();
   all.push({
@@ -91,6 +91,12 @@ export function addMessage(from: "noshin" | "nabil", text: string) {
     createdAt: Date.now(),
   });
   writeMessages(all.slice(-100));
+  
+  if (sync) {
+    import('./api').then(({ addChatMessage }) => {
+      addChatMessage(from, text).catch(() => {});
+    });
+  }
 }
 
 type Presence = {
