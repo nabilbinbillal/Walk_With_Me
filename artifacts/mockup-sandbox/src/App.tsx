@@ -98,19 +98,31 @@ function getPreviewExamplePath(): string {
 
 function Gallery() {
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-8">
-      <div className="text-center max-w-md">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-3">
-          Component Preview Server
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-8">
+      <div className="text-center max-w-2xl">
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">
+          Walk With Me
         </h1>
-        <p className="text-gray-500 mb-4">
-          This server renders individual components for the workspace canvas.
+        <p className="text-xl text-gray-700 mb-8">
+          Your personal journey application
         </p>
-        <p className="text-sm text-gray-400">
-          Access component previews at{" "}
-          <code className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
-            {getPreviewExamplePath()}
-          </code>
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <p className="text-gray-600 mb-4">
+            Welcome to your deployed application! Choose your experience:
+          </p>
+          <div className="space-y-4">
+            <a 
+              href="https://walk-with-me-noshin-walks.vercel.app"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block bg-pink-500 hover:bg-pink-600 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+            >
+              🎮 Play Walking Game
+            </a>
+          </div>
+        </div>
+        <p className="text-sm text-gray-500">
+          Note: Game will be deployed separately at the link above
         </p>
       </div>
     </div>

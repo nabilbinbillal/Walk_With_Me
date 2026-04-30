@@ -2,10 +2,5 @@
   "buildCommand": "pnpm install && pnpm run build",
   "outputDirectory": "dist",
   "installCommand": "pnpm install",
-  "framework": "vite",
-  "env": {
-    "PORT": "3000",
-    "BASE_PATH": "/",
-    "NODE_ENV": "production"
-  }
+  "framework": "vite"
 }

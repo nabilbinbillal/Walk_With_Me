@@ -96,6 +96,9 @@ export function addMessage(from: "noshin" | "nabil", text: string) {
 type Presence = {
   nabilLastSeen: number;
   noshinLastSeen: number;
+  nabilWalking?: boolean;
+  noshinWalking?: boolean;
+  noshinWalkingAlone?: boolean;
 };
 
 export function readPresence(): Presence {
@@ -107,12 +110,19 @@ export function readPresence(): Presence {
 }
 
 export function pingPresence(who: "noshin" | "nabil") {
+  // Update localStorage for fallback
   const p = readPresence();
   const next: Presence =
     who === "nabil"
       ? { ...p, nabilLastSeen: Date.now() }
       : { ...p, noshinLastSeen: Date.now() };
   localStorage.setItem(PRESENCE_KEY, JSON.stringify(next));
+  
+  // Try to sync with API for multiplayer
+  import('./api').then(({ syncPresence }) => {
+    syncPresence(who).catch(() => {});
+  });
+  
   window.dispatchEvent(new Event("noshin-store-change"));
 }
 
@@ -186,10 +196,27 @@ export function pingWalkPos(
   facing: -1 | 1,
   walking: boolean,
   jumpY = 0,
+  isAlone = false,
 ) {
   const key = who === "noshin" ? WALKPOS_NOSHIN_KEY : WALKPOS_NABIL_KEY;
   const data: WalkPos = { worldX, facing, walking, jumpY, ts: Date.now() };
   localStorage.setItem(key, JSON.stringify(data));
+  
+  // Update presence to track walking state and alone status
+  const p = readPresence();
+  if (who === "noshin") {
+    p.noshinWalking = walking;
+    p.noshinWalkingAlone = isAlone;
+  } else {
+    p.nabilWalking = walking;
+  }
+  localStorage.setItem(PRESENCE_KEY, JSON.stringify(p));
+  
+  // Try to sync with API for multiplayer
+  import('./api').then(({ syncWalkPos }) => {
+    syncWalkPos(who, data).catch(() => {});
+  });
+  
   window.dispatchEvent(new Event("noshin-store-change"));
 }
 

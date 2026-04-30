@@ -10,6 +10,7 @@ import {
   pingWalkPos,
   readGhostMessages,
   readMessages,
+  readPresence,
   readWalkPos,
   readWorldScene,
   TIME_PERIODS,
@@ -931,12 +932,17 @@ export function WalkingGame({ mode, onExit }: Props) {
       const pingNow = t - lastPingT > 120 || me.jumpY > 0;
       if (pingNow) {
         lastPingT = t;
+        // Check if walking alone (only show to other person if not alone)
+        const otherIsPresent = isNabilHere() || isNoshinHere();
+        const isAlone = mode === "noshin" && !otherIsPresent;
+        
         pingWalkPos(
           mode,
           scrollXRef.current,
           (me.facing as -1 | 1),
           me.walking,
           me.jumpY,
+          isAlone,
         );
       }
 
@@ -945,8 +951,13 @@ export function WalkingGame({ mode, onExit }: Props) {
       const otherSide: Mode = mode === "noshin" ? "nabil" : "noshin";
       const otherPos = readWalkPos(otherSide);
       const POS_FRESH_MS = 6000;
-      const otherIsPresent =
-        !!otherPos && Date.now() - otherPos.ts < POS_FRESH_MS;
+      const presence = readPresence();
+      
+      // Hide Noshin from Nabil if she's walking alone
+      let otherIsPresent = !!otherPos && Date.now() - otherPos.ts < POS_FRESH_MS;
+      if (mode === "nabil" && otherSide === "noshin" && presence.noshinWalkingAlone) {
+        otherIsPresent = false;
+      }
       if (otherIsPresent && otherPos) {
         // Their screen X = where they'd appear in my world, given the
         // difference between our world-X positions. Clamp to keep on-screen
@@ -1237,6 +1248,21 @@ export function WalkingGame({ mode, onExit }: Props) {
           >
             KEYS
           </button>
+          {mode === "nabil" && (
+            <button
+              className="pixel-btn pixel-btn-primary"
+              onClick={() => {
+                const otherPos = readWalkPos("noshin");
+                if (otherPos) {
+                  scrollXRef.current = otherPos.worldX + (otherPos.facing === 1 ? -100 : 100);
+                }
+              }}
+              style={{ fontSize: 9, padding: "8px 10px", boxShadow: "2px 2px 0 0 #1a1a1a" }}
+              title="Teleport to Noshin"
+            >
+              TP ♡
+            </button>
+          )}
         </div>
 
         {/* Nabil's contextual quick-send chips — only on Nabil's walk page */}
