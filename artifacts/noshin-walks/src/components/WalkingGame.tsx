@@ -1331,9 +1331,9 @@ export function WalkingGame({ mode, onExit }: Props) {
         <button onClick={onExit} className="pixel-btn" style={{ fontSize: 9, padding: "6px 10px", boxShadow: "2px 2px 0 0 #1a1a1a" }}>
           ◄ HOME
         </button>
-        <div style={{ textAlign: "center" }}>
-          {meName.toUpperCase()}'S WALK
-          <div style={{ fontSize: 8, marginTop: 2, opacity: 0.7 }}>
+        <div style={{ textAlign: "center", flex: 1, padding: "0 8px" }}>
+          <div style={{ whiteSpace: "nowrap" }}>{meName.toUpperCase()}'S WALK</div>
+          <div style={{ fontSize: 8, marginTop: 4, opacity: 0.7 }}>
             {(() => {
                 const presence = readPresence();
                 const otherLastSeen = mode === "noshin" ? presence.nabilLastSeen : presence.noshinLastSeen;
@@ -1343,17 +1343,19 @@ export function WalkingGame({ mode, onExit }: Props) {
                 const pingColor = !ping ? "#94a3b8" : ping < 150 ? "#4ade80" : ping < 400 ? "#fbbf24" : "#f87171";
                 
                 return (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
-                    <span style={{ 
-                      display: "inline-block", 
-                      width: 6, 
-                      height: 6, 
-                      borderRadius: "50%", 
-                      background: online ? "#4ade80" : "#94a3b8",
-                      boxShadow: online ? "0 0 4px #4ade80" : "none"
-                    }} />
-                    <span>{otherName.toUpperCase()} • {statusText}</span>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 8 }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ 
+                        display: "inline-block", 
+                        width: 6, 
+                        height: 6, 
+                        borderRadius: "50%", 
+                        background: online ? "#4ade80" : "#94a3b8",
+                        boxShadow: online ? "0 0 4px #4ade80" : "none"
+                      }} />
+                      <span>{otherName.toUpperCase()} • {statusText}</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                       <span className="ping-heart" style={{ fontSize: 10 }}>♡</span>
                       <span style={{ fontSize: 8, color: pingColor, fontWeight: "bold" }}>
                         {ping ? `${ping}ms` : "---ms"}
