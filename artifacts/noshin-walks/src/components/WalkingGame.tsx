@@ -22,7 +22,7 @@ import {
   type Theme,
   type WorldScene,
 } from "@/lib/store";
-import { getWalkPos, syncPresence } from "@/lib/api";
+import { getWalkPos, syncPresence, getSocketUrl } from "../lib/api";
 
 type Mode = "noshin" | "nabil";
 
@@ -774,6 +774,7 @@ export function WalkingGame({ mode, onExit }: Props) {
   const ghostMsgTimerRef = useRef(0);
   const ghostXRef = useRef(0);
   const ghostYRef = useRef(0);
+  const socketRef = useRef<WebSocket | null>(null);
   const messagesRef = useRef(readMessages());
   const lastMsgIdRef = useRef<string | null>(
     messagesRef.current[messagesRef.current.length - 1]?.id ?? null,
@@ -853,6 +854,55 @@ export function WalkingGame({ mode, onExit }: Props) {
     return () => {
       clearInterval(heartbeat);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [mode]);
+
+  // WebSocket for real-time multiplayer movement
+  useEffect(() => {
+    let cleanup = false;
+    let reconnectTimeout: number;
+
+    const connect = () => {
+      if (cleanup) return;
+      
+      const url = getSocketUrl();
+      const ws = new WebSocket(url);
+      socketRef.current = ws;
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'walk-pos' && msg.who !== mode) {
+            const other = otherCharRef.current;
+            other.targetWorldX = msg.worldX;
+            other.facing = msg.facing;
+            other.walking = msg.walking;
+            other.jumpY = msg.jumpY || 0;
+            
+            // Also update localStorage for fallback
+            const key = msg.who === "noshin" ? 'noshin.walkpos.noshin.v1' : 'noshin.walkpos.nabil.v1';
+            localStorage.setItem(key, JSON.stringify({ ...msg, ts: Date.now() }));
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      };
+
+      ws.onclose = () => {
+        if (!cleanup) {
+          reconnectTimeout = window.setTimeout(connect, 3000);
+        }
+      };
+      
+      ws.onerror = () => ws.close();
+    };
+
+    connect();
+
+    return () => {
+      cleanup = true;
+      socketRef.current?.close();
+      window.clearTimeout(reconnectTimeout);
     };
   }, [mode]);
 
@@ -1023,12 +1073,30 @@ export function WalkingGame({ mode, onExit }: Props) {
         const otherIsPresent = isNabilHereSync() || isNoshinHereSync();
         const isAlone = mode === "noshin" && !otherIsPresent;
         
+        const posData = {
+          worldX: scrollXRef.current,
+          facing: (me.facing as -1 | 1),
+          walking: me.walking,
+          jumpY: me.jumpY,
+          ts: Date.now()
+        };
+
+        // Real-time broadcast via WebSocket (PUBG-style low latency)
+        if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+          socketRef.current.send(JSON.stringify({
+            type: 'walk-pos',
+            who: mode,
+            ...posData
+          }));
+        }
+
+        // Standard sync via HTTP (reliable fallback)
         pingWalkPos(
           mode,
-          scrollXRef.current,
-          (me.facing as -1 | 1),
-          me.walking,
-          me.jumpY,
+          posData.worldX,
+          posData.facing,
+          posData.walking,
+          posData.jumpY,
           isAlone,
         );
       }

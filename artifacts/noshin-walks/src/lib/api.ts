@@ -77,6 +77,10 @@ export async function getChatMessages(): Promise<Array<{from: 'noshin' | 'nabil'
   }
 }
 
+export function getSocketUrl(): string {
+  return API_URL.replace(/^http/, 'ws');
+}
+
 export async function syncGhostMessages(messages: string[]): Promise<void> {
   try {
     await fetch(`${API_URL}/api/ghost-messages`, {
@@ -88,3 +92,4 @@ export async function syncGhostMessages(messages: string[]): Promise<void> {
     // Fallback to localStorage
   }
 }
+
