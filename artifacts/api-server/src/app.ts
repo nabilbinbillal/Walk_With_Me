@@ -31,4 +31,20 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
 
+// Root route for debugging
+app.get("/", (req, res) => {
+  res.json({
+    message: "Walk With Me API Server",
+    status: "running",
+    endpoints: {
+      health: "/api/health",
+      status: "/api/status",
+      presence: "/api/presence",
+      walk_pos: "/api/walk-pos",
+      messages: "/api/messages"
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
 export default app;

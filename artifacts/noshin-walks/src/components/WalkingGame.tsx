@@ -1281,10 +1281,19 @@ export function WalkingGame({ mode, onExit }: Props) {
           {mode === "nabil" && (
             <button
               className="pixel-btn pixel-btn-primary"
-              onClick={() => {
-                const otherPos = readWalkPos("noshin");
-                if (otherPos) {
-                  scrollXRef.current = otherPos.worldX + (otherPos.facing === 1 ? -100 : 100);
+              onClick={async () => {
+                try {
+                  // Try API first for cross-network teleport
+                  const otherPos = await getWalkPos("noshin");
+                  if (otherPos) {
+                    scrollXRef.current = otherPos.worldX + (otherPos.facing === 1 ? -100 : 100);
+                  }
+                } catch {
+                  // Fallback to localStorage
+                  const otherPos = readWalkPos("noshin");
+                  if (otherPos) {
+                    scrollXRef.current = otherPos.worldX + (otherPos.facing === 1 ? -100 : 100);
+                  }
                 }
               }}
               style={{ fontSize: 9, padding: "8px 10px", boxShadow: "2px 2px 0 0 #1a1a1a" }}
