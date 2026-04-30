@@ -27,8 +27,8 @@ wss.on("connection", (ws) => {
     try {
       const message = JSON.parse(data.toString());
       
-      // Broadcast movement to everyone EXCEPT the sender
-      if (message.type === "walk-pos") {
+      // Broadcast movement and chat to everyone EXCEPT the sender
+      if (message.type === "walk-pos" || message.type === "chat-msg") {
         wss.clients.forEach((client) => {
           if (client !== ws && client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify(message));
