@@ -738,6 +738,7 @@ export function WalkingGame({ mode, onExit }: Props) {
   const [bubble, setBubble] = useState<{ from: Mode; text: string } | null>(
     null,
   );
+  const [ping, setPing] = useState<number | null>(null);
   const [, force] = useState(0);
 
   // refs for game loop
@@ -853,8 +854,11 @@ export function WalkingGame({ mode, onExit }: Props) {
       try {
         const otherSide: Mode = mode === "noshin" ? "nabil" : "noshin";
         
+        const start = performance.now();
         // Get real-time presence from server
         const presence = await syncPresence(mode);
+        const end = performance.now();
+        setPing(Math.round(end - start));
         
         // Update presence in localStorage for immediate UI updates
         const p = readPresence();
@@ -1242,6 +1246,8 @@ export function WalkingGame({ mode, onExit }: Props) {
                 const online = isOnline(otherLastSeen);
                 const statusText = getOnlineStatusText(otherLastSeen);
                 
+                const pingColor = !ping ? "#94a3b8" : ping < 150 ? "#4ade80" : ping < 400 ? "#fbbf24" : "#f87171";
+                
                 return (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
                     <span style={{ 
@@ -1253,7 +1259,12 @@ export function WalkingGame({ mode, onExit }: Props) {
                       boxShadow: online ? "0 0 4px #4ade80" : "none"
                     }} />
                     <span>{otherName.toUpperCase()} • {statusText}</span>
-                    <span className="ping-heart" style={{ marginLeft: 6, fontSize: 10 }}>♡</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 8 }}>
+                      <span className="ping-heart" style={{ fontSize: 10 }}>♡</span>
+                      <span style={{ fontSize: 8, color: pingColor, fontWeight: "bold" }}>
+                        {ping ? `${ping}ms` : "---ms"}
+                      </span>
+                    </div>
                   </div>
                 );
               })()}

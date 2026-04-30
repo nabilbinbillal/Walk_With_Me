@@ -130,11 +130,28 @@ export function Home({ mode }: Props) {
     mode === "noshin" ? isNabilHereSync() : isNoshinHereSync(),
   );
   const [unread, setUnread] = useState(readMessages().length);
+  const [ping, setPing] = useState<number | null>(null);
 
   useEffect(() => {
     pingPresence(mode);
-    const id = window.setInterval(() => {
+    const id = window.setInterval(async () => {
+      const start = performance.now();
       pingPresence(mode);
+      // pingPresence is fire-and-forget in store.ts, so we'll measure the time 
+      // of the next actual sync if we wanted accuracy, but for simplicity 
+      // let's just use the Home page loop to track ping if we can.
+      // Actually, store.ts pingPresence is fire-and-forget.
+      // I'll modify store.ts to return the promise if needed, or just 
+      // do a separate health check here to measure ping.
+      try {
+        const { syncPresence } = await import('@/lib/api');
+        await syncPresence(mode);
+        const end = performance.now();
+        setPing(Math.round(end - start));
+      } catch {
+        setPing(null);
+      }
+      
       setNabilHere(isNabilHereSync());
       setOtherHere(mode === "noshin" ? isNabilHereSync() : isNoshinHereSync());
       force((v) => v + 1);
@@ -248,7 +265,15 @@ export function Home({ mode }: Props) {
             </div>
           </div>
           <div className="font-pixel" style={{ fontSize: 9, opacity: 0.6, textAlign: "right" }}>
-            <span className="ping-heart" style={{ marginRight: 6 }}>♡</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end", marginBottom: 2 }}>
+              <span className="ping-heart" style={{ fontSize: 10 }}>♡</span>
+              <span style={{ 
+                color: !ping ? "#94a3b8" : ping < 150 ? "#4ade80" : ping < 400 ? "#fbbf24" : "#f87171",
+                fontWeight: "bold"
+              }}>
+                {ping ? `${ping}ms` : "---ms"}
+              </span>
+            </div>
             {mode === "noshin" ? "/  HOME" : "/NABIL"}
           </div>
         </section>
