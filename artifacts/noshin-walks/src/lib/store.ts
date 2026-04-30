@@ -118,12 +118,27 @@ export function pingPresence(who: "noshin" | "nabil") {
       : { ...p, noshinLastSeen: Date.now() };
   localStorage.setItem(PRESENCE_KEY, JSON.stringify(next));
   
-  // Try to sync with API for multiplayer
+  // Sync with API immediately for real-time updates
   import('./api').then(({ syncPresence }) => {
     syncPresence(who).catch(() => {});
   });
   
   window.dispatchEvent(new Event("noshin-store-change"));
+}
+
+// WhatsApp-style online status
+export function isOnline(lastSeen: number): boolean {
+  return Date.now() - lastSeen < 5000; // Online if seen within 5 seconds
+}
+
+export function getOnlineStatusText(lastSeen: number): string {
+  if (isOnline(lastSeen)) return "online";
+  const seconds = Math.floor((Date.now() - lastSeen) / 1000);
+  if (seconds < 60) return `last seen ${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `last seen ${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `last seen ${hours}h ago`;
 }
 
 export async function isNabilHere(graceMs = 8000): Promise<boolean> {

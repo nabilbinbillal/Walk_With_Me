@@ -15,12 +15,14 @@ import {
   readWorldScene,
   TIME_PERIODS,
   useStoreSubscribe,
+  getOnlineStatusText,
+  isOnline,
   type TimePeriod,
   type Weather,
   type Theme,
   type WorldScene,
 } from "@/lib/store";
-import { getWalkPos } from "@/lib/api";
+import { getWalkPos, syncPresence } from "@/lib/api";
 
 type Mode = "noshin" | "nabil";
 
@@ -822,11 +824,51 @@ export function WalkingGame({ mode, onExit }: Props) {
     };
   }, []);
 
+  // Continuous presence heartbeat (WhatsApp-style)
+  useEffect(() => {
+    // Send heartbeat every 3 seconds to maintain "online" status
+    const heartbeat = setInterval(() => {
+      pingPresence(mode);
+    }, 3000);
+    
+    // Handle page visibility changes (when user switches tabs/apps)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // User returned to the page - send immediate heartbeat
+        pingPresence(mode);
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [mode]);
+
   // API polling for real-time multiplayer sync
   useEffect(() => {
     const pollServer = async () => {
       try {
         const otherSide: Mode = mode === "noshin" ? "nabil" : "noshin";
+        
+        // Get real-time presence from server
+        const presence = await syncPresence(mode);
+        
+        // Update presence in localStorage for immediate UI updates
+        const p = readPresence();
+        const updatedPresence = {
+          ...p,
+          [`${mode}LastSeen`]: presence[`${mode}LastSeen`],
+          [`${otherSide}LastSeen`]: presence[`${otherSide}LastSeen`],
+          [`${otherSide}Walking`]: presence[`${otherSide}Walking`],
+          noshinWalkingAlone: presence.noshinWalkingAlone
+        };
+        localStorage.setItem('noshin.presence.v1', JSON.stringify(updatedPresence));
+        window.dispatchEvent(new Event("noshin-store-change"));
+        
+        // Get other character position
         const otherPos = await getWalkPos(otherSide);
         
         if (otherPos) {
@@ -1190,9 +1232,16 @@ export function WalkingGame({ mode, onExit }: Props) {
         <div style={{ textAlign: "center" }}>
           {meName.toUpperCase()}'S WALK
           <div style={{ fontSize: 8, marginTop: 2, opacity: 0.7 }}>
-            {(mode === "noshin" ? isNabilHereSync() : isNoshinHereSync())
-              ? `${otherName.toUpperCase()} IS HERE`
-              : `${otherName.toUpperCase()} NOT HERE`}
+            {(() => {
+                const presence = readPresence();
+                const otherLastSeen = mode === "noshin" ? presence.nabilLastSeen : presence.noshinLastSeen;
+                const online = isOnline(otherLastSeen);
+                const statusText = getOnlineStatusText(otherLastSeen);
+                
+                return online 
+                  ? `${otherName.toUpperCase()} • ${statusText}`
+                  : `${otherName.toUpperCase()} • ${statusText}`;
+              })()}
           </div>
         </div>
         <button

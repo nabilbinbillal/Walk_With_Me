@@ -5,6 +5,7 @@ export type Presence = {
   noshinLastSeen: number;
   nabilWalking?: boolean;
   noshinWalking?: boolean;
+  noshinWalkingAlone?: boolean;
 };
 
 export type WalkPos = {
