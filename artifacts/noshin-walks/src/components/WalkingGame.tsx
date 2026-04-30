@@ -557,6 +557,7 @@ type Character = {
   x: number;
   y: number;
   worldX: number;
+  targetWorldX: number; // For smooth interpolation
   facing: 1 | -1;
   walkFrame: number;
   walking: boolean;
@@ -750,6 +751,7 @@ export function WalkingGame({ mode, onExit }: Props) {
     x: 0,
     y: 0,
     worldX: 0,
+    targetWorldX: 0,
     facing: -1,
     walkFrame: 0,
     walking: false,
@@ -760,6 +762,7 @@ export function WalkingGame({ mode, onExit }: Props) {
     x: 0,
     y: 0,
     worldX: 0,
+    targetWorldX: 0,
     facing: -1,
     walkFrame: 0,
     walking: false,
@@ -880,9 +883,9 @@ export function WalkingGame({ mode, onExit }: Props) {
           const key = otherSide === "noshin" ? 'noshin.walkpos.noshin.v1' : 'noshin.walkpos.nabil.v1';
           localStorage.setItem(key, JSON.stringify({ ...otherPos, ts: Date.now() }));
           
-          // Also update the ref for immediate access if needed
+          // Update the target for smooth interpolation
           const other = otherCharRef.current;
-          other.worldX = otherPos.worldX;
+          other.targetWorldX = otherPos.worldX;
           other.facing = otherPos.facing;
           other.walking = otherPos.walking;
           other.jumpY = otherPos.jumpY || 0;
@@ -892,8 +895,8 @@ export function WalkingGame({ mode, onExit }: Props) {
       }
     };
 
-    // Poll every 500ms for a more real-time feel
-    const id = window.setInterval(pollServer, 500);
+    // Poll every 400ms for a more real-time feel
+    const id = window.setInterval(pollServer, 400);
     return () => window.clearInterval(id);
   }, [mode]);
 
@@ -1037,20 +1040,24 @@ export function WalkingGame({ mode, onExit }: Props) {
       if (mode === "nabil" && otherSide === "noshin" && presence.noshinWalkingAlone) {
         otherIsPresent = false;
       }
-      if (otherIsPresent && otherPos) {
-        // Their screen X = where they'd appear in my world, given the
-        // difference between our world-X positions. Clamp to keep on-screen
-        // when they're far so they walk in from the side instead of vanishing.
-        const targetScreenX = me.x + (otherPos.worldX - scrollXRef.current);
+      if (otherPos) {
+        // Uber-style smooth interpolation:
+        // Instead of snapping to the server worldX, we interpolate toward it.
+        // This hides the polling gaps and makes movement feel fluid.
+        other.worldX = other.worldX + (other.targetWorldX - other.worldX) * Math.min(1, dt * 0.008);
+        
+        const targetScreenX = me.x + (other.worldX - scrollXRef.current);
         const minX = -SPRITE_W;
         const maxX = w + SPRITE_W;
         let drawX = targetScreenX;
         if (drawX < minX) drawX = minX;
         if (drawX > maxX) drawX = maxX;
-        // Smooth interpolate toward target for a less jittery look.
+        
+        // Final screen position interpolation
         other.x = other.x === 0
           ? drawX
-          : other.x + (drawX - other.x) * Math.min(1, dt * 0.012);
+          : other.x + (drawX - other.x) * Math.min(1, dt * 0.05);
+        
         other.jumpY = otherPos.jumpY ?? 0;
         other.y = groundY - SPRITE_H - other.jumpY;
         other.facing = otherPos.facing;
@@ -1104,59 +1111,33 @@ export function WalkingGame({ mode, onExit }: Props) {
         if (otherIsPresent) drawNoshin(ctx, other);
       }
 
-      // When Noshin walks alone (Nabil not here), Nabil's voice calls out
-      // from off-screen on the LEFT — "noshin wait for me i am coming gurl".
-      // A tiny Nabil head peeks in from the left edge with a speech bubble.
+      // When Nabil is offline, he appears as a floating ghost companion for Noshin.
       if (mode === "noshin" && !otherIsPresent) {
         ghostFloatPhaseRef.current += dt * 0.003;
-        const peekBob = Math.sin(ghostFloatPhaseRef.current) * 2;
-        const peekX = 4;
-        const peekY = groundY - SPRITE_H + peekBob;
-        // Tiny Nabil head poking in from off-screen (only right half visible)
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, peekY - 4, SPRITE_W * 0.55, SPRITE_H + 12);
-        ctx.clip();
-        drawNabil(ctx, {
-          x: peekX - SPRITE_W * 0.45,
-          y: peekY,
-          worldX: 0,
-          facing: 1,
-          walkFrame: 0,
-          walking: false,
-          jumpY: 0,
-          jumpVy: 0,
-        });
-        ctx.restore();
+        const bob = Math.sin(ghostFloatPhaseRef.current) * 8;
+        // Position ghost Nabil slightly behind and above Noshin
+        const ghostX = me.x - 40; 
+        const ghostY = me.y - 45 + bob;
+        
+        drawSkyGhost(ctx, ghostX, ghostY);
+        
+        // Ghostly speech bubble
         const text = "noshin wait for me i am coming gurl ♡";
         ctx.font = "18px VT323, monospace";
-        const padX = 10;
-        const tw = Math.min(ctx.measureText(text).width, w * 0.55);
-        const bw = tw + padX * 2;
+        const tw = ctx.measureText(text).width;
+        const bw = tw + 20;
         const bh = 28;
-        // anchor bubble UP-AND-RIGHT of the peeking head
-        const bx = peekX + SPRITE_W * 0.55 + 12;
-        const by = peekY - bh - 4;
-        ctx.fillStyle = "#ffffff";
+        const bx = ghostX + 24;
+        const by = ghostY - 10;
+        
+        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
         ctx.strokeStyle = "#1a1a1a";
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 2;
         ctx.fillRect(bx, by, bw, bh);
         ctx.strokeRect(bx, by, bw, bh);
-        // tail pointing back-left toward head
-        ctx.beginPath();
-        ctx.moveTo(bx, by + 8);
-        ctx.lineTo(bx - 10, by + 16);
-        ctx.lineTo(bx, by + 20);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+        
         ctx.fillStyle = "#1a1a1a";
-        let display = text;
-        while (ctx.measureText(display).width > tw && display.length > 4) {
-          display = display.slice(0, -2);
-        }
-        if (display !== text) display = display.slice(0, -1) + "…";
-        ctx.fillText(display, bx + padX, by + 19);
+        ctx.fillText(text, bx + 10, by + 19);
       }
 
       // HUD bubble
