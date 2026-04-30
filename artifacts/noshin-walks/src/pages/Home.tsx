@@ -248,6 +248,7 @@ export function Home({ mode }: Props) {
             </div>
           </div>
           <div className="font-pixel" style={{ fontSize: 9, opacity: 0.6, textAlign: "right" }}>
+            <span className="ping-heart" style={{ marginRight: 6 }}>♡</span>
             {mode === "noshin" ? "/  HOME" : "/NABIL"}
           </div>
         </section>
@@ -300,12 +301,13 @@ export function Home({ mode }: Props) {
           otherName={otherName}
         />
 
+        {mode === "nabil" && <GhostMessagesPanel />}
+
         {/* Proposals */}
         <section style={{ marginBottom: 18 }}>
           <div className="font-pixel" style={{ fontSize: 12, marginBottom: 10 }}>
             ✉  WALK PROPOSALS
           </div>
-
           {proposals.length === 0 && (
             <div
               className="pixel-border"
@@ -345,8 +347,6 @@ export function Home({ mode }: Props) {
             </div>
           )}
         </section>
-
-        {mode === "nabil" && <GhostMessagesPanel />}
 
         {/* Stats */}
         <section

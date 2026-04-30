@@ -1242,9 +1242,20 @@ export function WalkingGame({ mode, onExit }: Props) {
                 const online = isOnline(otherLastSeen);
                 const statusText = getOnlineStatusText(otherLastSeen);
                 
-                return online 
-                  ? `${otherName.toUpperCase()} • ${statusText}`
-                  : `${otherName.toUpperCase()} • ${statusText}`;
+                return (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                    <span style={{ 
+                      display: "inline-block", 
+                      width: 6, 
+                      height: 6, 
+                      borderRadius: "50%", 
+                      background: online ? "#4ade80" : "#94a3b8",
+                      boxShadow: online ? "0 0 4px #4ade80" : "none"
+                    }} />
+                    <span>{otherName.toUpperCase()} • {statusText}</span>
+                    <span className="ping-heart" style={{ marginLeft: 6, fontSize: 10 }}>♡</span>
+                  </div>
+                );
               })()}
           </div>
         </div>
