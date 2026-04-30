@@ -872,7 +872,11 @@ export function WalkingGame({ mode, onExit }: Props) {
         const otherPos = await getWalkPos(otherSide);
         
         if (otherPos) {
-          // Update the other character's position from server
+          // Update localStorage so the main game loop picks it up
+          const key = otherSide === "noshin" ? 'noshin.walkpos.noshin.v1' : 'noshin.walkpos.nabil.v1';
+          localStorage.setItem(key, JSON.stringify({ ...otherPos, ts: Date.now() }));
+          
+          // Also update the ref for immediate access if needed
           const other = otherCharRef.current;
           other.worldX = otherPos.worldX;
           other.facing = otherPos.facing;
@@ -880,12 +884,12 @@ export function WalkingGame({ mode, onExit }: Props) {
           other.jumpY = otherPos.jumpY || 0;
         }
       } catch (error) {
-        // Silently fail - fallback to localStorage
+        // Silently fail
       }
     };
 
-    // Poll every 2 seconds for real-time updates
-    const id = window.setInterval(pollServer, 2000);
+    // Poll every 1 second for real-time updates
+    const id = window.setInterval(pollServer, 1000);
     return () => window.clearInterval(id);
   }, [mode]);
 

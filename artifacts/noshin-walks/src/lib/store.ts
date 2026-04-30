@@ -392,25 +392,45 @@ function pickWeighted<T>(entries: [T, number][]): T {
 }
 
 function rollScene(prev?: WorldScene | null): WorldScene {
-  const timeOfDay = currentPeriod();
-  // Weighted weather — clear most common, rain occasional, storm/rainbow rare.
-  const weather = pickWeighted<Weather>([
-    ["clear", 60],
-    ["rain", 22],
-    ["rainbow", 10],
-    ["storm", 8],
-  ]);
-  // Theme — pick something different from previous when possible.
-  const themes: Theme[] = ["cherry", "garden", "market", "park"];
-  const choices = prev ? themes.filter((t) => t !== prev.theme) : themes;
-  const theme = choices[Math.floor(Math.random() * choices.length)];
   const now = Date.now();
+  // Determinstic seed based on 4-minute blocks
+  const timeBlock = Math.floor(now / SCENE_DURATION_MS);
+  
+  // Simple seeded random based on timeBlock
+  const seed = (timeBlock * 9301 + 49297) % 233280;
+  const rnd = seed / 233280;
+  
+  const timeOfDay = currentPeriod();
+  
+  // Deterministic weather based on seed
+  const weatherChoices: Weather[] = ["clear", "rain", "rainbow", "storm"];
+  const weatherWeights = [60, 22, 10, 8];
+  let weather: Weather = "clear";
+  let cumulative = 0;
+  const totalWeight = weatherWeights.reduce((a, b) => a + b, 0);
+  const weatherRnd = ((seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  const targetWeight = weatherRnd * totalWeight;
+  
+  for (let i = 0; i < weatherChoices.length; i++) {
+    cumulative += weatherWeights[i];
+    if (targetWeight <= cumulative) {
+      weather = weatherChoices[i];
+      break;
+    }
+  }
+
+  // Deterministic theme
+  const themes: Theme[] = ["cherry", "garden", "market", "park"];
+  const themeRnd = ((seed * 1664525 + 1013904223) & 0x7fffffff) / 0x7fffffff;
+  const theme = themes[Math.floor(themeRnd * themes.length)];
+
+  const startedAt = timeBlock * SCENE_DURATION_MS;
   return {
     timeOfDay,
     weather,
     theme,
-    startedAt: now,
-    rotateAt: now + SCENE_DURATION_MS,
+    startedAt,
+    rotateAt: startedAt + SCENE_DURATION_MS,
   };
 }
 
