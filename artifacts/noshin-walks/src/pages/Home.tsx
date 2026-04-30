@@ -3,8 +3,8 @@ import { Link } from "wouter";
 import {
   addGhostMessage,
   isJoinTime,
-  isNabilHere,
-  isNoshinHere,
+  isNabilHereSync,
+  isNoshinHereSync,
   nabilStatusText,
   parseProposalTime,
   pingPresence,
